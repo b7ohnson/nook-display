@@ -21,6 +21,7 @@ import { useNotifications } from './hooks/useNotifications'
 import { useSettings } from './hooks/useSettings'
 import { events as mockEvents, familyMembers } from './data/mockData'
 import SettingsPanel from './components/SettingsPanel'
+import SpotifyBar from './components/SpotifyBar'
 import './App.css'
 
 const IDLE_MS  = 2 * 60 * 1000
@@ -249,6 +250,7 @@ export default function App() {
           onSaved={() => setModal(null)}
         />
       )}
+      <SpotifyBar />
     </div>
   )
 }
