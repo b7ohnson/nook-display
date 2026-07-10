@@ -1,10 +1,18 @@
+import {
+  IconPuzzle, IconBlocks, IconHelpCircle,
+  IconScale, IconZap, IconSmartphone,
+  IconDollarSign, IconMic,
+} from '../Icons'
+
 const GAMES = [
-  { id: 'riddles',   title: 'Daily Riddle',       desc: 'One riddle per day. Keep your streak alive.', icon: '🧩', ready: true  },
-  { id: 'tetris',    title: 'Tetris',              desc: 'Classic block-stacking action.',               icon: '🟦', ready: true },
-  { id: 'trivia',    title: 'Trivia',              desc: 'Test your knowledge across categories.',       icon: '❓', ready: true },
-  { id: 'wyr',       title: 'Would You Rather',    desc: 'Two options. Everyone votes.',                 icon: '⚖️', ready: true },
-  { id: 'showdown',  title: 'Trivia Showdown',     desc: 'Buzzer-style multiplayer trivia.',             icon: '🔔', ready: true },
-  { id: 'headsup',   title: 'Heads Up',            desc: 'Tilt to guess — phone on your forehead.',     icon: '📱', ready: true },
+  { id: 'riddles',  title: 'Daily Riddle',       desc: 'One riddle per day. Keep your streak alive.', Icon: IconPuzzle,      ready: true },
+  { id: 'tetris',   title: 'Tetris',              desc: 'Classic block-stacking action.',               Icon: IconBlocks,      ready: true },
+  { id: 'trivia',   title: 'Trivia',              desc: 'Test your knowledge across categories.',       Icon: IconHelpCircle,  ready: true },
+  { id: 'wyr',      title: 'Would You Rather',    desc: 'Two options. Everyone votes.',                 Icon: IconScale,       ready: true },
+  { id: 'showdown', title: 'Trivia Showdown',     desc: 'Buzzer-style multiplayer trivia.',             Icon: IconZap,         ready: true },
+  { id: 'headsup',  title: 'Heads Up',            desc: 'Tilt to guess — phone on your forehead.',     Icon: IconSmartphone,  ready: true },
+  { id: 'jeopardy', title: 'Jeopardy!',           desc: '6 categories, daily doubles, and team scoring.', Icon: IconDollarSign, ready: true },
+  { id: 'feud',     title: 'Family Feud',         desc: 'Survey says! Two families battle it out.',    Icon: IconMic,         ready: true },
 ]
 
 export default function GamesMenu({ onSelect }) {
@@ -20,7 +28,7 @@ export default function GamesMenu({ onSelect }) {
             onClick={() => g.ready && onSelect(g.id)}
             disabled={!g.ready}
           >
-            <span className="game-card-icon">{g.icon}</span>
+            <span className="game-card-icon"><g.Icon size={32} /></span>
             <span className="game-card-title">{g.title}</span>
             <span className="game-card-desc">{g.desc}</span>
             {!g.ready && <span className="game-card-badge">Coming soon</span>}

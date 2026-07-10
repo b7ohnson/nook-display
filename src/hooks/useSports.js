@@ -13,6 +13,9 @@ const LEAGUES = [
   { key: 'worldcup',   label: 'World Cup',       path: 'soccer/fifa.world/scoreboard', featured: true  },
 ]
 
+let cache = null
+let cacheTime = 0
+
 function weekBounds() {
   const now = new Date()
   const day = now.getDay()
@@ -56,17 +59,34 @@ export function useSports() {
   )
 
   useEffect(() => {
-    LEAGUES.forEach((league, idx) => {
-      fetch(`${BASE}/${league.path}?limit=50`)
-        .then(r => r.json())
-        .then(data => {
-          const games = parseGames(data)
-          setLeagues(prev => prev.map((l, i) => i === idx ? { ...l, games, loading: false } : l))
-        })
-        .catch(err => {
-          setLeagues(prev => prev.map((l, i) => i === idx ? { ...l, loading: false, error: err.message } : l))
-        })
-    })
+    const doFetch = () => {
+      if (Date.now() - cacheTime < 5 * 60 * 1000 && cache) {
+        setLeagues(cache)
+        return
+      }
+      let remaining = LEAGUES.length
+      LEAGUES.forEach((league, idx) => {
+        fetch(`${BASE}/${league.path}?limit=50`)
+          .then(r => r.json())
+          .then(data => {
+            const games = parseGames(data)
+            remaining--
+            const allDone = remaining === 0
+            setLeagues(prev => {
+              const next = prev.map((l, i) => i === idx ? { ...l, games, loading: false } : l)
+              if (allDone) { cache = next; cacheTime = Date.now() }
+              return next
+            })
+          })
+          .catch(err => {
+            remaining--
+            setLeagues(prev => prev.map((l, i) => i === idx ? { ...l, loading: false, error: err.message } : l))
+          })
+      })
+    }
+    doFetch()
+    const t = setInterval(doFetch, 5 * 60 * 1000)
+    return () => clearInterval(t)
   }, [])
 
   return leagues

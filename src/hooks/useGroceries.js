@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { useState, useEffect, useRef } from 'react'
+import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const REF = doc(db, 'skylight', 'groceries')
@@ -8,11 +8,14 @@ export function useGroceries() {
   const [items, setItems]   = useState([])
   const [synced, setSynced] = useState(false)
   const [error, setError]   = useState(null)
+  const itemsRef            = useRef([])
 
   useEffect(() => {
     const unsub = onSnapshot(REF,
       snap => {
-        setItems(snap.data()?.items || [])
+        const latest = snap.data()?.items || []
+        itemsRef.current = latest
+        setItems(latest)
         setSynced(true)
         setError(null)
       },
@@ -21,19 +24,33 @@ export function useGroceries() {
     return unsub
   }, [])
 
-  const save = (next) => setDoc(REF, { items: next }, { merge: true })
-
   const add = (name) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    save([...items, { id: Date.now(), name: trimmed, done: false }])
+    const newItem = { id: Date.now(), name: trimmed, done: false }
+    updateDoc(REF, { items: arrayUnion(newItem) })
   }
 
-  const toggle = (id) => save(items.map(i => i.id === id ? { ...i, done: !i.done } : i))
+  const toggle = (id) =>
+    runTransaction(db, async (txn) => {
+      const snap = await txn.get(REF)
+      const current = snap.data()?.items || []
+      const updated = current.map(i => i.id === id ? { ...i, done: !i.done } : i)
+      txn.update(REF, { items: updated })
+    })
 
-  const remove = (id) => save(items.filter(i => i.id !== id))
+  const remove = (id) => {
+    const item = itemsRef.current.find(i => i.id === id)
+    if (!item) return
+    updateDoc(REF, { items: arrayRemove(item) })
+  }
 
-  const clearDone = () => save(items.filter(i => !i.done))
+  const clearDone = () =>
+    runTransaction(db, async (txn) => {
+      const snap = await txn.get(REF)
+      const current = snap.data()?.items || []
+      txn.update(REF, { items: current.filter(i => !i.done) })
+    })
 
   return { items, synced, error, add, toggle, remove, clearDone }
 }

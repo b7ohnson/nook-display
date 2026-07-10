@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import GamePanel from './GamePanel'
 import { useGameRoom, generateRoomCode } from '../../hooks/useGameRoom'
+import { IconSmartphone, IconCheckCircle, IconSkipForward } from '../Icons'
 
 const COMPANION_URL = 'https://skylight-16f44.web.app'
 const CATEGORIES = ['Animals', 'Movies', 'Sports Stars', 'Food', 'Jobs', 'Actions']
+const RANK_COLORS = ['#f59e0b', '#94a3b8', '#b45309']
 
 export default function HeadsUp({ onExit }) {
   const [roomCode] = useState(generateRoomCode)
@@ -69,7 +71,9 @@ export default function HeadsUp({ onExit }) {
             ? <p className="headsup-waiting">Scan the QR code to join…</p>
             : <ul className="headsup-player-list">
                 {players.map(p => (
-                  <li key={p.id} className="headsup-player-item">📱 {p.name}</li>
+                  <li key={p.id} className="headsup-player-item">
+                    <IconSmartphone size={14} /> {p.name}
+                  </li>
                 ))}
               </ul>
           }
@@ -93,16 +97,23 @@ export default function HeadsUp({ onExit }) {
     >
       <div className="headsup-active">
         <div className="headsup-active-info">
-          <div className="headsup-active-icon">📱</div>
+          <div className="headsup-active-icon"><IconSmartphone size={40} /></div>
           <div className="headsup-active-text">Players are playing on their phones!</div>
-          <div className="headsup-active-hint">Tilt down = ✅ correct · Tilt up = ⏭ skip</div>
+          <div className="headsup-active-hint">
+            <IconCheckCircle size={14} /> tilt forward = correct &nbsp;·&nbsp;
+            <IconSkipForward size={14} /> tilt back = skip &nbsp;·&nbsp; 3 min timer
+          </div>
         </div>
         <div className="headsup-scores-grid">
           {players.map(p => (
             <div key={p.id} className={`headsup-score-card ${p.finished ? 'headsup-score-card--done' : ''}`}>
               <div className="headsup-score-name">{p.name}</div>
               {p.finished
-                ? <div className="headsup-score-tally">✅ {p.correct || 0} &nbsp; ⏭ {p.skipped || 0}</div>
+                ? <div className="headsup-score-tally">
+                    <IconCheckCircle size={13} /> {p.correct || 0}
+                    &nbsp;&nbsp;
+                    <IconSkipForward size={13} /> {p.skipped || 0}
+                  </div>
                 : <div className="headsup-score-playing">Playing…</div>
               }
             </div>
@@ -121,9 +132,18 @@ export default function HeadsUp({ onExit }) {
         <ol className="headsup-results-list">
           {sorted.map((p, i) => (
             <li key={p.id} className="headsup-results-row">
-              <span className="headsup-results-rank">{['🥇','🥈','🥉'][i] || `${i+1}.`}</span>
+              <span
+                className="headsup-results-rank"
+                style={i < 3 ? { color: RANK_COLORS[i], fontWeight: 700 } : {}}
+              >
+                {i < 3 ? `#${i + 1}` : `${i + 1}.`}
+              </span>
               <span className="headsup-results-name">{p.name}</span>
-              <span className="headsup-results-score">✅ {p.correct||0} · ⏭ {p.skipped||0}</span>
+              <span className="headsup-results-score">
+                <IconCheckCircle size={13} /> {p.correct || 0}
+                &nbsp;&nbsp;
+                <IconSkipForward size={13} /> {p.skipped || 0}
+              </span>
             </li>
           ))}
         </ol>

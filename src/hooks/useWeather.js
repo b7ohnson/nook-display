@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const WMO = {
   0:  { label: 'Clear',          icon: '☀️' },
@@ -35,16 +35,37 @@ export function useWeather() {
   const [coords, setCoords]   = useState(null)
   const [weather, setWeather] = useState(null)
   const [error, setError]     = useState(null)
+  const cityRef               = useRef({ city: '', state: '' })
 
   // Get geolocation once
   useEffect(() => {
     if (!navigator.geolocation) { setError('Geolocation not supported'); return }
     navigator.geolocation.getCurrentPosition(
-      pos => setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      pos => setCoords({
+        lat: Math.round(pos.coords.latitude  * 100) / 100,
+        lon: Math.round(pos.coords.longitude * 100) / 100,
+      }),
       ()  => setError('Location denied — showing mock weather'),
       { timeout: 10000 }
     )
   }, [])
+
+  // Reverse-geocode once when coords first become available
+  useEffect(() => {
+    if (!coords || cityRef.current.city) return
+    fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client` +
+      `?latitude=${coords.lat}&longitude=${coords.lon}&localityLanguage=en`
+    )
+      .then(r => r.json())
+      .then(gData => {
+        cityRef.current = {
+          city:  gData.city || gData.locality || gData.principalSubdivision || '',
+          state: gData.principalSubdivisionCode?.replace(/^[A-Z]+-/, '') || '',
+        }
+      })
+      .catch(() => {})
+  }, [coords])
 
   // Fetch weather whenever coords are available, refresh every 30 min
   useEffect(() => {
@@ -52,28 +73,20 @@ export function useWeather() {
 
     const fetchWeather = async () => {
       try {
-        const [wRes, gRes] = await Promise.all([
-          fetch(
-            `https://api.open-meteo.com/v1/forecast` +
-            `?latitude=${coords.lat}&longitude=${coords.lon}` +
-            `&current=temperature_2m,apparent_temperature,weather_code` +
-            `&daily=temperature_2m_max,temperature_2m_min` +
-            `&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`
-          ),
-          fetch(
-            `https://api.bigdatacloud.net/data/reverse-geocode-client` +
-            `?latitude=${coords.lat}&longitude=${coords.lon}&localityLanguage=en`
-          ),
-        ])
+        const wRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast` +
+          `?latitude=${coords.lat}&longitude=${coords.lon}` +
+          `&current=temperature_2m,apparent_temperature,weather_code` +
+          `&daily=temperature_2m_max,temperature_2m_min` +
+          `&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`
+        )
 
         const wData = await wRes.json()
-        const gData = await gRes.json()
 
         const cur   = wData.current
         const daily = wData.daily
         const info  = wmoInfo(cur.weather_code)
-        const city  = gData.city || gData.locality || gData.principalSubdivision || ''
-        const state = gData.principalSubdivisionCode?.replace(/^[A-Z]+-/, '') || ''
+        const { city, state } = cityRef.current
 
         setWeather({
           temp:      Math.round(cur.temperature_2m),

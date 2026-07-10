@@ -21,7 +21,7 @@ import { useNotifications } from './hooks/useNotifications'
 import { events as mockEvents, familyMembers } from './data/mockData'
 import './App.css'
 
-const IDLE_MS  = 2 * 60 * 1000
+const IDLE_MS  = 10 * 60 * 1000
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 function normalizeMock(raw) {
@@ -141,7 +141,18 @@ export default function App() {
       <ToastNotifications toasts={toasts} dismiss={dismiss} />
 
       <header className="app-header">
-        <Clock />
+        <div className="app-header-brand">
+          <svg className="app-header-mark" width="28" height="32" viewBox="0 0 64 74" aria-label="NooK">
+            <path d="M7,70 L7,31 C7,14 19,5 32,5 C45,5 57,14 57,31 L57,70"
+                  stroke="#F0A500" strokeWidth="3" fill="none"
+                  strokeLinecap="round" strokeLinejoin="round"/>
+            <line x1="3" y1="70" x2="61" y2="70"
+                  stroke="#F0A500" strokeWidth="3" strokeLinecap="round"/>
+            <circle cx="21" cy="40" r="10" fill="#4A7FA5"/>
+            <circle cx="43" cy="40" r="10" fill="#F0A500"/>
+          </svg>
+          <Clock />
+        </div>
         <div className="header-right">
           <WeatherWidget />
           {CLIENT_ID && (
@@ -156,8 +167,12 @@ export default function App() {
           </button>
           <div className="auth-user">
             {user.photoURL
-              ? <img src={user.photoURL} alt="" className="auth-avatar" />
-              : <div className="auth-avatar auth-avatar--initial">{user.displayName?.[0] || '?'}</div>}
+              ? <button className="auth-avatar-btn" onClick={logOut} aria-label="Sign out" title="Sign out">
+                  <img src={user.photoURL} alt="" className="auth-avatar" />
+                </button>
+              : <button className="auth-avatar-btn auth-avatar auth-avatar--initial" onClick={logOut} aria-label="Sign out" title="Sign out">
+                  {user.displayName?.[0] || '?'}
+                </button>}
             <button className="auth-signout" onClick={logOut} title="Sign out">Sign out</button>
           </div>
         </div>
@@ -169,6 +184,7 @@ export default function App() {
             key={id}
             className={`page-tab ${page === id ? 'page-tab--active' : ''}`}
             onClick={() => setPage(id)}
+            aria-current={page === id ? 'page' : undefined}
           >
             <Icon size={14} />
             {label}
@@ -202,7 +218,7 @@ export default function App() {
 
       {page === 'media' && <MediaPage />}
       {page === 'meals' && <MealPlanner />}
-      {page === 'games' && <GamesPage />}
+      {page === 'games' && <div className="games-page"><GamesPage /></div>}
 
       {modal && (
         <EventModal

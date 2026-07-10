@@ -6,6 +6,8 @@ import Trivia from './Trivia'
 import WouldYouRather from './WouldYouRather'
 import TriviaShowdown from './TriviaShowdown'
 import HeadsUp from './HeadsUp'
+import Jeopardy from './Jeopardy'
+import FamilyFeud from './FamilyFeud'
 
 const GAME_MAP = {
   riddles:  DailyRiddles,
@@ -14,6 +16,8 @@ const GAME_MAP = {
   wyr:      WouldYouRather,
   showdown: TriviaShowdown,
   headsup:  HeadsUp,
+  jeopardy: Jeopardy,
+  feud:     FamilyFeud,
 }
 
 export default function GamesPage() {
