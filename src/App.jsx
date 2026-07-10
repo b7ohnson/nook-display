@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Clock from './components/Clock'
 import WeatherWidget from './components/WeatherWidget'
 import MiniCalendar from './components/MiniCalendar'
@@ -8,7 +8,7 @@ import GroceryList from './components/GroceryList'
 import MediaPage from './components/MediaPage'
 import MealPlanner from './components/MealPlanner'
 import EventModal from './components/EventModal'
-import { IconHome, IconTv, IconUtensils, IconSun, IconMoon, IconGamepad } from './components/Icons'
+import { IconHome, IconTv, IconUtensils, IconSun, IconMoon, IconGamepad, IconSettings } from './components/Icons'
 import GamesPage from './components/games/GamesPage'
 import PhotoSlideshow from './components/PhotoSlideshow'
 import LoginPage from './components/LoginPage'
@@ -18,7 +18,9 @@ import { useGoogleCalendar, parseEventId } from './hooks/useGoogleCalendar'
 import { useAuth } from './hooks/useAuth'
 import { useDarkMode } from './hooks/useDarkMode'
 import { useNotifications } from './hooks/useNotifications'
+import { useSettings } from './hooks/useSettings'
 import { events as mockEvents, familyMembers } from './data/mockData'
+import SettingsPanel from './components/SettingsPanel'
 import './App.css'
 
 const IDLE_MS  = 2 * 60 * 1000
@@ -63,6 +65,9 @@ export default function App() {
   const { user, loading: authLoading, signIn, logOut } = useAuth()
   const { dark, toggle: toggleDark } = useDarkMode()
   const { toasts, dismiss } = useNotifications()
+  const { settings, update: updateSetting } = useSettings()
+  const [showSettings, setShowSettings] = useState(false)
+  const closeSettings = useCallback(() => setShowSettings(false), [])
   const [isIdle, setIsIdle]             = useState(false)
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [page, setPage]                 = useState('home')
@@ -166,6 +171,9 @@ export default function App() {
           <button className="dark-toggle" onClick={toggleDark} title={dark ? 'Light mode' : 'Dark mode'}>
             {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
           </button>
+          <button className="dark-toggle" onClick={() => setShowSettings(true)} aria-label="Display settings" title="Settings">
+            <IconSettings size={16} />
+          </button>
           <div className="auth-user">
             {user.photoURL
               ? <button className="auth-avatar-btn" onClick={logOut} aria-label="Sign out" title="Sign out">
@@ -220,6 +228,13 @@ export default function App() {
       {page === 'media' && <MediaPage />}
       {page === 'meals' && <MealPlanner />}
       {page === 'games' && <div className="games-page"><GamesPage /></div>}
+
+      <SettingsPanel
+        open={showSettings}
+        onClose={closeSettings}
+        settings={settings}
+        onUpdate={updateSetting}
+      />
 
       {modal && (
         <EventModal
