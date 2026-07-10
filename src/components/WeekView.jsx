@@ -216,6 +216,8 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
                 <div
                   key={i}
                   className={`wv-col ${isToday ? 'wv-col--today' : ''}`}
+                  role="button"
+                  tabIndex={0}
                   onDragOver={onEventDrop ? handleDragOver : undefined}
                   onDrop={onEventDrop ? ev => handleDrop(ds, ev) : undefined}
                   onClick={ev => {
@@ -227,6 +229,12 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
                     const h    = String(Math.floor(mins / 60)).padStart(2,'0')
                     const m    = String(Math.round((mins % 60) / 15) * 15 % 60).padStart(2,'0')
                     onSlotClick(ds, `${h}:${m}`, false)
+                  }}
+                  onKeyDown={ev => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault()
+                      onSlotClick?.(ds, '09:00', false)
+                    }
                   }}
                 >
                   {isToday && nowY >= 0 && nowY <= GRID_HEIGHT && (
@@ -243,9 +251,19 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
                       <div
                         key={e.id}
                         className="wv-evt"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${e.title}, ${e.date}`}
                         draggable={!!onEventDrop}
                         onDragStart={onEventDrop ? ev => handleDragStart(e, ev) : undefined}
                         onClick={ev => { ev.stopPropagation(); onEventClick?.(e) }}
+                        onKeyDown={ev => {
+                          if (ev.key === 'Enter' || ev.key === ' ') {
+                            ev.stopPropagation()
+                            ev.preventDefault()
+                            onEventClick?.(e)
+                          }
+                        }}
                         style={{
                           top:    y,
                           height: h,

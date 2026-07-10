@@ -48,6 +48,7 @@ export function useGoogleCalendar(clientId, storageKey = 'default') {
   const [error, setError]           = useState(null)
   const clientRef                   = useRef(null)
   const silentRef                   = useRef(null)
+  const fetchDebounceRef            = useRef(null)
 
   const onToken = useCallback((accessToken) => {
     sessionStorage.setItem(tokenKey, accessToken)
@@ -209,6 +210,11 @@ export function useGoogleCalendar(clientId, storageKey = 'default') {
 
   useEffect(() => { if (token) fetchAll(token) }, [token, fetchAll])
 
+  const debouncedFetch = useCallback((tok) => {
+    clearTimeout(fetchDebounceRef.current)
+    fetchDebounceRef.current = setTimeout(() => fetchAll(tok), 400)
+  }, [fetchAll])
+
   // ── Write methods ──────────────────────────────
   const createEvent = useCallback(async (calendarId = 'primary', eventData) => {
     if (!token) return
@@ -216,8 +222,8 @@ export function useGoogleCalendar(clientId, storageKey = 'default') {
     await authFetch(`${GCAL}/calendars/${encodeURIComponent(calendarId)}/events`, {
       method: 'POST', body: JSON.stringify(body),
     })
-    fetchAll(token)
-  }, [token, authFetch, fetchAll])
+    debouncedFetch(token)
+  }, [token, authFetch, debouncedFetch])
 
   const updateEvent = useCallback(async (calendarId, eventId, eventData) => {
     if (!token) return
@@ -225,16 +231,16 @@ export function useGoogleCalendar(clientId, storageKey = 'default') {
     await authFetch(`${GCAL}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
       method: 'PUT', body: JSON.stringify(body),
     })
-    fetchAll(token)
-  }, [token, authFetch, fetchAll])
+    debouncedFetch(token)
+  }, [token, authFetch, debouncedFetch])
 
   const deleteEvent = useCallback(async (calendarId, eventId) => {
     if (!token) return
     await authFetch(`${GCAL}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
       method: 'DELETE',
     })
-    fetchAll(token)
-  }, [token, authFetch, fetchAll])
+    debouncedFetch(token)
+  }, [token, authFetch, debouncedFetch])
 
   return {
     isSignedIn: !!token,

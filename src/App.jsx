@@ -21,7 +21,7 @@ import { useNotifications } from './hooks/useNotifications'
 import { events as mockEvents, familyMembers } from './data/mockData'
 import './App.css'
 
-const IDLE_MS  = 10 * 60 * 1000
+const IDLE_MS  = 2 * 60 * 1000
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 function normalizeMock(raw) {
@@ -137,6 +137,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <h1 className="sr-only">NooK Family Display</h1>
       {isIdle && <PhotoSlideshow />}
       <ToastNotifications toasts={toasts} dismiss={dismiss} />
 
@@ -192,33 +193,31 @@ export default function App() {
         ))}
       </nav>
 
-      {page === 'home' && (
-        <>
-          <main className="app-main">
-            <aside className="left-panel">
-              <MiniCalendar events={events} legend={legend} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-              <RemindersPanel events={events} />
-              <GroceryList />
-            </aside>
-            <section className="right-panel">
-              <WeekView
-                events={events}
-                focusDate={selectedDate}
-                onSlotClick={(date, time, allDay) => anyConnected && setModal({ date, time, allDay })}
-                onEventClick={(event) => anyConnected && setModal({ event })}
-                onEventDrop={anyConnected ? handleEventDrop : undefined}
-              />
-            </section>
-          </main>
-          <footer className="app-footer">
-            <ChoreList />
-          </footer>
-        </>
-      )}
+      <div hidden={page !== 'home'}>
+        <main className="app-main">
+          <aside className="left-panel">
+            <MiniCalendar events={events} legend={legend} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+            <RemindersPanel events={events} />
+            <GroceryList />
+          </aside>
+          <section className="right-panel">
+            <WeekView
+              events={events}
+              focusDate={selectedDate}
+              onSlotClick={(date, time, allDay) => anyConnected && setModal({ date, time, allDay })}
+              onEventClick={(event) => anyConnected && setModal({ event })}
+              onEventDrop={anyConnected ? handleEventDrop : undefined}
+            />
+          </section>
+        </main>
+        <footer className="app-footer">
+          <ChoreList />
+        </footer>
+      </div>
 
-      {page === 'media' && <MediaPage />}
-      {page === 'meals' && <MealPlanner />}
-      {page === 'games' && <div className="games-page"><GamesPage /></div>}
+      <div hidden={page !== 'media'}><MediaPage /></div>
+      <div hidden={page !== 'meals'}><MealPlanner /></div>
+      <div hidden={page !== 'games'} className="games-page"><GamesPage /></div>
 
       {modal && (
         <EventModal

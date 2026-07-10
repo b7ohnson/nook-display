@@ -12,7 +12,11 @@ export function useGallery() {
     return onSnapshot(GAL_REF, snap => {
       setPhotos(snap.data()?.photos || [])
       setLoading(false)
-    }, () => setLoading(false))
+    }, err => {
+      console.error('Gallery snapshot error:', err)
+      setPhotos([])
+      setLoading(false)
+    })
   }, [])
 
   return { photos, loading }

@@ -5,18 +5,40 @@ import { initialChores } from '../data/mockData'
 
 const DOC_REF = () => doc(db, 'skylight', 'tasks')
 
-const RECURRENCE_MS = {
-  daily:   1 * 24 * 60 * 60 * 1000,
-  weekly:  7 * 24 * 60 * 60 * 1000,
-  monthly: 30 * 24 * 60 * 60 * 1000,
+function nextMidnight(ts) {
+  const d = new Date(ts)
+  d.setHours(24, 0, 0, 0) // next midnight in local time
+  return d.getTime()
+}
+
+function nextMonday(ts) {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  const day = d.getDay() // 0=Sun, 1=Mon, ...
+  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7 || 7
+  d.setDate(d.getDate() + daysUntilMonday)
+  return d.getTime()
+}
+
+function nextMonthStart(ts) {
+  const d = new Date(ts)
+  return new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime()
 }
 
 function resetElapsed(list) {
   const now = Date.now()
   return list.map(t => {
     if (!t.done || !t.recurrence || t.recurrence === 'none') return t
-    const ms = RECURRENCE_MS[t.recurrence]
-    if (ms && t.completedAt && now - t.completedAt >= ms) {
+    if (!t.completedAt) return t
+    let shouldReset = false
+    if (t.recurrence === 'daily') {
+      shouldReset = now >= nextMidnight(t.completedAt)
+    } else if (t.recurrence === 'weekly') {
+      shouldReset = now >= nextMonday(t.completedAt)
+    } else if (t.recurrence === 'monthly') {
+      shouldReset = now >= nextMonthStart(t.completedAt)
+    }
+    if (shouldReset) {
       return { ...t, done: false, completedAt: null }
     }
     return t

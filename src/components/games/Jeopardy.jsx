@@ -62,7 +62,10 @@ export default function Jeopardy({ onExit }) {
   const dailyDoubles = useMemo(() => pickDailyDoubles(board), [boardIdx]) // eslint-disable-line
 
   const playUrl = `${COMPANION_URL}/play/${roomCode}`
-  const qrUrl   = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(playUrl)}`
+  const qrUrl   = useMemo(
+    () => `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(playUrl)}`,
+    [roomCode] // eslint-disable-line
+  )
 
   // Create room on mount
   useEffect(() => {
@@ -307,7 +310,6 @@ export default function Jeopardy({ onExit }) {
             )}
           </div>
 
-          <button className="jeop-skip-btn" onClick={closeClue}>← Board</button>
         </div>
 
         {active.dd && (

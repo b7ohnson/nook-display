@@ -12,22 +12,24 @@ export function useLeaderboard(game, timeRange = 'all') {
 
     async function fetch() {
       setLoading(true)
-      let q = query(
-        collection(db, 'scores'),
+      let cutoff
+      if (timeRange === 'today') {
+        cutoff = new Date()
+        cutoff.setHours(0, 0, 0, 0)
+      } else if (timeRange === 'week') {
+        cutoff = new Date(Date.now() - 7 * 86400000)
+      }
+      const constraints = [
         where('game', '==', game),
+        ...(cutoff ? [where('timestamp', '>=', cutoff)] : []),
         orderBy('score', 'desc'),
-        limit(10)
-      )
+        limit(10),
+      ]
+      let q = query(collection(db, 'scores'), ...constraints)
       try {
         const snap = await getDocs(q)
         if (!cancelled) {
-          let entries = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-          if (timeRange !== 'all') {
-            const cutoff = timeRange === 'today'
-              ? new Date().setHours(0, 0, 0, 0)
-              : Date.now() - 7 * 86400000
-            entries = entries.filter(e => e.timestamp?.toMillis?.() >= cutoff)
-          }
+          const entries = snap.docs.map(d => ({ id: d.id, ...d.data() }))
           setScores(entries)
         }
       } catch { if (!cancelled) setScores([]) }

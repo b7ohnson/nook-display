@@ -63,6 +63,12 @@ export default function EventModal({ event, defaultDate, defaultTime, accounts, 
     }
   }
 
+  // Restore focus on unmount; save previously focused element
+  useEffect(() => {
+    const prev = document.activeElement
+    return () => prev?.focus()
+  }, [])
+
   // Close on Escape
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose() }
@@ -72,11 +78,31 @@ export default function EventModal({ event, defaultDate, defaultTime, accounts, 
 
   const signedInAccounts = accounts.filter(a => a.isSignedIn)
 
+  const handleFocusTrap = (e) => {
+    if (e.key !== 'Tab') return
+    const focusable = e.currentTarget.querySelectorAll(
+      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    const first = focusable[0]
+    const last  = focusable[focusable.length - 1]
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last?.focus() }
+    } else {
+      if (document.activeElement === last)  { e.preventDefault(); first?.focus() }
+    }
+  }
+
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="event-modal-title"
+        onKeyDown={handleFocusTrap}
+      >
         <div className="modal-header">
-          <h3 className="modal-title">{isEdit ? 'Edit Event' : 'New Event'}</h3>
+          <h3 className="modal-title" id="event-modal-title">{isEdit ? 'Edit Event' : 'New Event'}</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 

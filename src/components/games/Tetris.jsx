@@ -154,7 +154,6 @@ export default function Tetris({ onExit }) {
     }
   }, [])
 
-  // tickRef updated every render so it always has fresh closures
   useEffect(() => {
     tickRef.current = function tick() {
       const gs = gsRef.current
@@ -196,7 +195,7 @@ export default function Tetris({ onExit }) {
       }
       draw()
     }
-  })
+  }, [])
 
   const startLoop = useCallback((lvl) => {
     clearInterval(loopRef.current)

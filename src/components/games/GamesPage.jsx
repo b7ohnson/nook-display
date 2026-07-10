@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import GamesMenu from './GamesMenu'
-import DailyRiddles from './DailyRiddles'
-import Tetris from './Tetris'
-import Trivia from './Trivia'
-import WouldYouRather from './WouldYouRather'
-import TriviaShowdown from './TriviaShowdown'
-import HeadsUp from './HeadsUp'
-import Jeopardy from './Jeopardy'
-import FamilyFeud from './FamilyFeud'
+
+const DailyRiddles   = lazy(() => import('./DailyRiddles'))
+const Tetris         = lazy(() => import('./Tetris'))
+const Trivia         = lazy(() => import('./Trivia'))
+const WouldYouRather = lazy(() => import('./WouldYouRather'))
+const TriviaShowdown = lazy(() => import('./TriviaShowdown'))
+const HeadsUp        = lazy(() => import('./HeadsUp'))
+const Jeopardy       = lazy(() => import('./Jeopardy'))
+const FamilyFeud     = lazy(() => import('./FamilyFeud'))
 
 const GAME_MAP = {
   riddles:  DailyRiddles,
@@ -25,7 +26,11 @@ export default function GamesPage() {
 
   if (activeGame && GAME_MAP[activeGame]) {
     const Game = GAME_MAP[activeGame]
-    return <Game onExit={() => setActiveGame(null)} />
+    return (
+      <Suspense fallback={<div className="game-loading">Loading…</div>}>
+        <Game onExit={() => setActiveGame(null)} />
+      </Suspense>
+    )
   }
 
   return <GamesMenu onSelect={setActiveGame} />

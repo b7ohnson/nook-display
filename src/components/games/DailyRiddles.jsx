@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import GamePanel from './GamePanel'
 import { useGameContent } from '../../hooks/useGameContent'
+import { IconFlame } from '../Icons'
 
 function todayStr() {
   const d = new Date()
@@ -71,7 +72,7 @@ export default function DailyRiddles({ onExit }) {
     <GamePanel title="Daily Riddle" onExit={onExit}>
       <div className="riddle-page">
         <div className="riddle-streak">
-          🔥 {streak} day streak
+          <IconFlame size={18} /> {streak} day streak
         </div>
 
         <div className="riddle-card">

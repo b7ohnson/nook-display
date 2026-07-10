@@ -38,12 +38,12 @@ export default function GroceryList() {
             <button
               className={`grocery-check ${item.done ? 'grocery-check--done' : ''}`}
               onClick={() => toggle(item.id)}
-              aria-label="toggle"
+              aria-label={item.done ? `Mark ${item.name} as not done` : `Mark ${item.name} as done`}
             >
               {item.done ? '✓' : ''}
             </button>
             <span className="grocery-name">{item.name}</span>
-            <button className="grocery-remove" onClick={() => remove(item.id)} aria-label="remove">✕</button>
+            <button className="grocery-remove" onClick={() => remove(item.id)} aria-label={`Remove ${item.name}`}>✕</button>
           </div>
         ))}
       </div>

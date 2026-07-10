@@ -6,9 +6,11 @@ import { useGameContent } from '../../hooks/useGameContent'
 import { useGameRoom, generateRoomCode } from '../../hooks/useGameRoom'
 import { useLeaderboard } from '../../hooks/useLeaderboard'
 import Leaderboard from './Leaderboard'
+import { weeklyShuffled } from '../../utils/weeklyRotation'
+import { IconUser, IconTrophy } from '../Icons'
 
 const COMPANION_URL = 'https://skylight-16f44.web.app'
-const QUESTIONS_PER_ROUND = 10
+const QUESTIONS_PER_ROUND = 15
 const TIME_LIMIT = 20
 
 const COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
@@ -125,7 +127,8 @@ export default function TriviaShowdown({ onExit }) {
   }
 
   const startGame = async () => {
-    const qs = shuffle(allQ).slice(0, QUESTIONS_PER_ROUND)
+    const weeklyPool = weeklyShuffled(allQ).slice(0, Math.min(allQ.length, QUESTIONS_PER_ROUND * 2))
+    const qs = shuffle(weeklyPool).slice(0, QUESTIONS_PER_ROUND)
     setQuestions(qs)
     questionsRef.current = qs
     const freshPlayers = players.map(p => ({ ...p, score: 0, answer: -1, answeredAt: null, lastPoints: 0 }))
@@ -170,7 +173,7 @@ export default function TriviaShowdown({ onExit }) {
           {players.length === 0
             ? <div className="showdown-waiting">Waiting for players to scan and join…</div>
             : <ul className="showdown-player-list">
-                {players.map(p => <li key={p.id} className="showdown-player-item">👤 {p.name}</li>)}
+                {players.map(p => <li key={p.id} className="showdown-player-item"><IconUser size={14} /> {p.name}</li>)}
               </ul>
           }
           <button className="showdown-start-btn" onClick={startGame} disabled={players.length === 0}>
@@ -191,14 +194,14 @@ export default function TriviaShowdown({ onExit }) {
           <ol className="showdown-final-scores">
             {sorted.map((p, i) => (
               <li key={p.id} className="showdown-final-row">
-                <span className="showdown-final-rank">{['🥇','🥈','🥉'][i] || `${i+1}.`}</span>
+                <span className="showdown-final-rank" style={i < 3 ? { color: ['#f59e0b','#94a3b8','#b45309'][i], fontWeight: 700 } : {}}>{i < 3 ? `#${i+1}` : `${i+1}.`}</span>
                 <span className="showdown-final-name">{p.name}</span>
                 <span className="showdown-final-pts">{(p.score || 0).toLocaleString()} pts</span>
               </li>
             ))}
           </ol>
           <button className="showdown-lb-toggle" onClick={() => setShowLB(v => !v)}>
-            {showLB ? 'Hide Leaderboard' : '🏆 All-time Leaderboard'}
+            <IconTrophy size={14} /> {showLB ? 'Hide Leaderboard' : 'All-time Leaderboard'}
           </button>
           {showLB && <Leaderboard game="showdown" />}
         </div>

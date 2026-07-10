@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import GamePanel from './GamePanel'
@@ -87,24 +87,14 @@ export default function FamilyFeud({ onExit }) {
   const fmAnswers2Ref  = useRef(Array(FM_COUNT).fill(''))
   const fmCurrentQRef  = useRef(0)
 
-  useEffect(() => { revealedRef.current    = revealed    }, [revealed])
-  useEffect(() => { strikesRef.current     = strikes     }, [strikes])
-  useEffect(() => { stealingRef.current    = stealing    }, [stealing])
-  useEffect(() => { showAllRef.current     = showAll     }, [showAll])
-  useEffect(() => { roundIdxRef.current    = roundIdx    }, [roundIdx])
-  useEffect(() => { activeRef.current      = active      }, [active])
-  useEffect(() => { faceofStateRef.current = faceofState }, [faceofState])
-  useEffect(() => { faceofRank1Ref.current = faceofRank1 }, [faceofRank1])
-  useEffect(() => { faceofTeam1Ref.current = faceofTeam1 }, [faceofTeam1])
-  useEffect(() => { fmPhaseRef.current     = fmPhase     }, [fmPhase])
-  useEffect(() => { fmAnswers1Ref.current  = fmAnswers1  }, [fmAnswers1])
-  useEffect(() => { fmAnswers2Ref.current  = fmAnswers2  }, [fmAnswers2])
-  useEffect(() => { fmCurrentQRef.current  = fmCurrentQ  }, [fmCurrentQ])
 
   const { players, payload, createRoom, removeRoom } = useGameRoom(roomCode)
 
   const playUrl = `${COMPANION_URL}/play/${roomCode}`
-  const qrUrl   = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(playUrl)}`
+  const qrUrl   = useMemo(
+    () => `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(playUrl)}`,
+    [roomCode] // eslint-disable-line
+  )
 
   useEffect(() => {
     roomDocRef.current = doc(db, 'gameRooms', roomCode)
@@ -170,9 +160,14 @@ export default function FamilyFeud({ onExit }) {
   const goNextRound = (idx) => {
     setRoundIdx(idx)
     roundIdxRef.current = idx
-    setRevealed(new Set())
+    const emptyRev = new Set()
+    revealedRef.current = emptyRev
+    setRevealed(emptyRev)
+    strikesRef.current = 0
     setStrikes(0)
+    stealingRef.current = false
     setStealing(false)
+    showAllRef.current = false
     setShowAll(false)
     startFaceof(idx)
   }
@@ -301,6 +296,7 @@ export default function FamilyFeud({ onExit }) {
     if (foundIdx >= 0) {
       const pts      = s.answers[foundIdx].pts * mult
       const newRev   = new Set([...curRev, foundIdx])
+      revealedRef.current = newRev
       setRevealed(newRev)
 
       if (curSteal) {
@@ -314,6 +310,7 @@ export default function FamilyFeud({ onExit }) {
           'payload.submittedAnswer': null,
         })
         setTimeout(() => {
+          showAllRef.current = true
           setShowAll(true)
           updateDoc(roomDocRef.current, {
             'payload.buzzersOpen':  false,
@@ -334,6 +331,7 @@ export default function FamilyFeud({ onExit }) {
         })
         setTimeout(() => {
           if (allFound) {
+            showAllRef.current = true
             setShowAll(true)
             updateDoc(roomDocRef.current, {
               'payload.buzzersOpen':  false,
@@ -351,6 +349,7 @@ export default function FamilyFeud({ onExit }) {
       }
     } else {
       const newStr = curStr + 1
+      strikesRef.current = newStr
       setStrikes(newStr)
       updateDoc(roomDocRef.current, {
         'payload.answerResult':    'strike',
@@ -362,6 +361,7 @@ export default function FamilyFeud({ onExit }) {
       if (curSteal) {
         setTimeout(() => {
           if (pot > 0) setScores(sc => sc.map((v, i) => i === curActive ? v + pot : v))
+          showAllRef.current = true
           setShowAll(true)
           updateDoc(roomDocRef.current, {
             'payload.buzzersOpen':  false,
@@ -372,6 +372,7 @@ export default function FamilyFeud({ onExit }) {
         }, 1500)
       } else if (newStr >= MAX_STRIKES) {
         const stealIdx = 1 - (sub.team ?? 0)
+        stealingRef.current = true
         setStealing(true)
         setTimeout(() => {
           updateDoc(roomDocRef.current, {
@@ -513,7 +514,7 @@ export default function FamilyFeud({ onExit }) {
           })
         }
       }
-    }, 250)
+    }, 1000)
     return () => clearInterval(id)
   }, [fmPhase, fmTimerStart]) // eslint-disable-line
 
@@ -555,9 +556,14 @@ export default function FamilyFeud({ onExit }) {
               setScores([0, 0])
               setRoundIdx(0)
               roundIdxRef.current = 0
-              setRevealed(new Set())
+              const emptyRev = new Set()
+              revealedRef.current = emptyRev
+              setRevealed(emptyRev)
+              strikesRef.current = 0
               setStrikes(0)
+              stealingRef.current = false
               setStealing(false)
+              showAllRef.current = false
               setShowAll(false)
               startFaceof(0)
             }}
@@ -833,7 +839,13 @@ export default function FamilyFeud({ onExit }) {
           <button
             key={i}
             className={`feud-answer ${!isFaceof && (revealed.has(i) || showAll) ? 'feud-answer--revealed' : ''}`}
-            onClick={() => !autoMode && !isFaceof && !showAll && !revealed.has(i) && setRevealed(r => new Set([...r, i]))}
+            onClick={() => {
+              if (!autoMode && !isFaceof && !showAll && !revealed.has(i)) {
+                const newRev = new Set([...revealed, i])
+                revealedRef.current = newRev
+                setRevealed(newRev)
+              }
+            }}
             disabled={(autoMode || showAll || isFaceof) && !revealed.has(i)}
           >
             <span className="feud-answer-num">{i + 1}</span>
@@ -901,14 +913,16 @@ export default function FamilyFeud({ onExit }) {
                 <>
                   <button className="feud-ctrl-btn feud-ctrl-btn--strike" onClick={() => {
                     const next = strikes + 1
+                    strikesRef.current = next
                     setStrikes(next)
-                    if (next >= MAX_STRIKES) setStealing(true)
+                    if (next >= MAX_STRIKES) { stealingRef.current = true; setStealing(true) }
                   }}>✕ Strike</button>
                   <button className="feud-ctrl-btn feud-ctrl-btn--correct" onClick={() => {
                     const pot = [...Array(survey.answers.length).keys()].reduce(
                       (s, i) => revealed.has(i) ? s + survey.answers[i].pts * multiplier : s, 0
                     )
                     if (pot > 0) setScores(sc => sc.map((v, i) => i === active ? v + pot : v))
+                    showAllRef.current = true
                     setShowAll(true)
                     closeBuzzers()
                   }}>✓ Award {names[active]}</button>
@@ -918,11 +932,12 @@ export default function FamilyFeud({ onExit }) {
                 const next = 1 - active
                 setActive(next)
                 activeRef.current = next
+                strikesRef.current = 0
                 setStrikes(0)
                 updateDoc(roomDocRef.current, { 'payload.activeTeam': next, 'payload.strikes': 0 })
               }}>⇄ Pass</button>
               {autoMode && (
-                <button className="feud-ctrl-btn feud-ctrl-btn--next" onClick={() => setShowAll(true)}>
+                <button className="feud-ctrl-btn feud-ctrl-btn--next" onClick={() => { showAllRef.current = true; setShowAll(true) }}>
                   Reveal All
                 </button>
               )}
@@ -942,6 +957,7 @@ export default function FamilyFeud({ onExit }) {
                         (s, j) => revealed.has(j) ? s + survey.answers[j].pts * multiplier : s, 0
                       )
                       if (pot > 0) setScores(sc => sc.map((v, j) => j === i ? v + pot : v))
+                      showAllRef.current = true
                       setShowAll(true)
                       closeBuzzers()
                     }}>
@@ -953,13 +969,14 @@ export default function FamilyFeud({ onExit }) {
                       (s, j) => revealed.has(j) ? s + survey.answers[j].pts * multiplier : s, 0
                     )
                     if (pot > 0) setScores(sc => sc.map((v, i) => i === active ? v + pot : v))
+                    showAllRef.current = true
                     setShowAll(true)
                     closeBuzzers()
                   }}>No steal — award {names[active]}</button>
                 </div>
               )}
               {autoMode && (
-                <button className="feud-ctrl-btn feud-ctrl-btn--pass" onClick={() => setShowAll(true)}>
+                <button className="feud-ctrl-btn feud-ctrl-btn--pass" onClick={() => { showAllRef.current = true; setShowAll(true) }}>
                   Skip steal
                 </button>
               )}
@@ -1002,13 +1019,21 @@ export default function FamilyFeud({ onExit }) {
               setScores([0, 0])
               setRoundIdx(0)
               roundIdxRef.current = 0
-              setRevealed(new Set())
+              const emptyRev = new Set()
+              revealedRef.current = emptyRev
+              setRevealed(emptyRev)
+              strikesRef.current = 0
               setStrikes(0)
+              stealingRef.current = false
               setStealing(false)
+              showAllRef.current = false
               setShowAll(false)
               startFaceof(0)
             }}>
               Play Again
+            </button>
+            <button className="feud-ctrl-btn feud-ctrl-btn--pass" onClick={onExit}>
+              Exit to Games
             </button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import GamePanel from './GamePanel'
 import { useGameContent } from '../../hooks/useGameContent'
+import { IconStar } from '../Icons'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -60,7 +61,7 @@ export default function WouldYouRather({ onExit }) {
   if (index >= prompts.length) return (
     <GamePanel title="Would You Rather" onExit={onExit}>
       <div className="wyr-done">
-        <div className="wyr-done-icon">🎉</div>
+        <div className="wyr-done-icon"><IconStar size={48} /></div>
         <div className="wyr-done-title">You've seen them all!</div>
         <div className="wyr-done-sub">{prompts.length} prompts completed</div>
         <button className="wyr-restart-btn" onClick={restart}>Start Over</button>
