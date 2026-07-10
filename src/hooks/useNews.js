@@ -18,9 +18,10 @@ export function useNews() {
           .then(data => {
             if (data.status !== 'ok') throw new Error(data.message || 'Feed error')
             const items = (data.items || []).slice(0, 8).map(i => ({
-              title: i.title,
-              link:  i.link,
-              date:  i.pubDate ? new Date(i.pubDate).toISOString() : null,
+              title:     i.title,
+              link:      i.link,
+              date:      i.pubDate ? new Date(i.pubDate).toISOString() : null,
+              thumbnail: i.thumbnail || i.enclosure?.url || null,
             })).filter(i => i.title)
             setFeeds(prev => prev.map((f, i) => i === idx ? { ...f, items, loading: false } : f))
           })

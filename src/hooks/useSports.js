@@ -41,14 +41,24 @@ function parseGames(data) {
       const status = comp?.status?.type
       const gameDate = new Date(ev.date || comp?.date || '')
       return {
-        id:        ev.id,
-        away:      teams[0]?.team?.shortDisplayName || teams[0]?.team?.abbreviation || '',
-        awayScore: teams[0]?.score || '',
-        home:      teams[1]?.team?.shortDisplayName || teams[1]?.team?.abbreviation || '',
-        homeScore: teams[1]?.score || '',
-        state:     status?.state || 'pre',
-        detail:    status?.shortDetail || '',
-        date:      !isNaN(gameDate) ? gameDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '',
+        id:         ev.id,
+        away:       teams[0]?.team?.shortDisplayName || teams[0]?.team?.abbreviation || '',
+        awayScore:  teams[0]?.score || '',
+        awayRecord: teams[0]?.records?.[0]?.summary || '',
+        awayLogo:   teams[0]?.team?.logo || '',
+        awayColor:  '#' + (teams[0]?.team?.color || '888888'),
+        home:       teams[1]?.team?.shortDisplayName || teams[1]?.team?.abbreviation || '',
+        homeScore:  teams[1]?.score || '',
+        homeRecord: teams[1]?.records?.[0]?.summary || '',
+        homeLogo:   teams[1]?.team?.logo || '',
+        homeColor:  '#' + (teams[1]?.team?.color || '888888'),
+        state:      status?.state || 'pre',
+        detail:     status?.shortDetail || '',
+        period:     comp?.status?.period || null,
+        clock:      comp?.status?.displayClock || '',
+        broadcast:  comp?.broadcasts?.[0]?.names?.[0] || '',
+        venue:      comp?.venue?.shortName || comp?.venue?.fullName || '',
+        date:       !isNaN(gameDate) ? gameDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '',
       }
     })
 }

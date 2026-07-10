@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react'
 import { useNews }   from '../hooks/useNews'
 import { useSports } from '../hooks/useSports'
 import { IconNewspaper, IconTrophy } from './Icons'
@@ -49,69 +50,111 @@ function NewsPanel({ feeds }) {
   const [hero, ...rest] = items.slice(0, 8)
 
   return (
-    <div className="news-editorial">
-      <a href={hero.link} target="_blank" rel="noopener noreferrer" className="news-hero">
-        <span className="news-eyebrow">{hero.category}</span>
-        <h2 className="news-hero__title">{hero.title}</h2>
-        {hero.date && <span className="news-hero__time">{timeAgo(hero.date)}</span>}
+    <div className="news-grid">
+      <a href={hero.link} target="_blank" rel="noopener noreferrer"
+         className="news-card news-card--hero"
+         style={{ backgroundImage: hero.thumbnail ? `url(${hero.thumbnail})` : undefined }}>
+        <div className="news-card__overlay">
+          <span className="news-card__eyebrow">{hero.category}</span>
+          <h2 className="news-card__title">{hero.title}</h2>
+          {hero.date && <span className="news-card__time">{timeAgo(hero.date)}</span>}
+        </div>
       </a>
-
-      <div className="news-supporting">
-        {rest.slice(0, 6).map((item, i) => (
-          <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" className="news-story">
-            <span className="news-eyebrow news-eyebrow--small">{item.category}</span>
-            <span className="news-story__title">{item.title}</span>
-            {item.date && <span className="news-story__time">{timeAgo(item.date)}</span>}
-          </a>
-        ))}
-      </div>
+      {rest.slice(0, 5).map((item, i) => (
+        <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
+           className="news-card"
+           style={{ backgroundImage: item.thumbnail ? `url(${item.thumbnail})` : undefined }}>
+          <div className="news-card__overlay">
+            <span className="news-card__eyebrow">{item.category}</span>
+            <span className="news-card__title">{item.title}</span>
+            {item.date && <span className="news-card__time">{timeAgo(item.date)}</span>}
+          </div>
+        </a>
+      ))}
     </div>
   )
 }
 
-function GameRow({ game }) {
+function GameCard({ game }) {
   const live = game.state === 'in'
   const done = game.state === 'post'
-  const pre  = game.state === 'pre'
+
   return (
-    <div className={`scoreboard-game${live ? ' scoreboard-game--live' : done ? ' scoreboard-game--final' : ' scoreboard-game--upcoming'}`}>
-      <div className="scoreboard-game__teams">
-        <span className="scoreboard-game__team">{game.away}</span>
-        {(live || done) ? (
-          <span className="scoreboard-game__scores">
-            <strong>{game.awayScore}</strong>
-            <span className="scoreboard-game__dash">–</span>
-            <strong>{game.homeScore}</strong>
-          </span>
-        ) : (
-          <span className="scoreboard-game__vs">vs</span>
-        )}
-        <span className="scoreboard-game__team">{game.home}</span>
+    <div className={`game-card${live ? ' game-card--live' : done ? ' game-card--final' : ''}`}>
+      {/* Away team */}
+      <div className="game-card__team">
+        {game.awayLogo && <img src={game.awayLogo} alt="" className="game-card__logo" />}
+        <div className="game-card__team-info">
+          <span className="game-card__team-name">{game.away}</span>
+          {game.awayRecord && <span className="game-card__record">{game.awayRecord}</span>}
+        </div>
+        {(live || done) && <span className={`game-card__score${done && Number(game.awayScore) > Number(game.homeScore) ? ' game-card__score--winner' : ''}`}>{game.awayScore}</span>}
       </div>
-      <span className="scoreboard-game__detail">
-        {live && <span className="scoreboard-live-dot" aria-label="Live" />}
-        {live ? 'LIVE' : game.detail || (pre ? game.date : '')}
-      </span>
+
+      {/* Middle: status */}
+      <div className="game-card__middle">
+        {live ? (
+          <div className="game-card__live-status">
+            <span className="scoreboard-live-dot" />
+            <span className="game-card__clock">{game.clock || game.detail}</span>
+          </div>
+        ) : done ? (
+          <span className="game-card__final">Final</span>
+        ) : (
+          <span className="game-card__kickoff">{game.date}</span>
+        )}
+        {game.broadcast && <span className="game-card__broadcast">{game.broadcast}</span>}
+        {game.venue && <span className="game-card__venue">{game.venue}</span>}
+      </div>
+
+      {/* Home team */}
+      <div className="game-card__team game-card__team--home">
+        {(live || done) && <span className={`game-card__score${done && Number(game.homeScore) > Number(game.awayScore) ? ' game-card__score--winner' : ''}`}>{game.homeScore}</span>}
+        <div className="game-card__team-info game-card__team-info--right">
+          <span className="game-card__team-name">{game.home}</span>
+          {game.homeRecord && <span className="game-card__record">{game.homeRecord}</span>}
+        </div>
+        {game.homeLogo && <img src={game.homeLogo} alt="" className="game-card__logo" />}
+      </div>
     </div>
   )
 }
 
 function SportsPanel({ leagues }) {
-  const active  = leagues.filter(l => !l.loading && l.games.length > 0)
-  const loading = leagues.some(l => l.loading)
+  const active = leagues.filter(l => !l.loading && l.games.length > 0)
+  const [idx, setIdx] = useState(0)
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    if (active.length <= 1) return
+    timerRef.current = setInterval(() => {
+      setIdx(i => (i + 1) % active.length)
+    }, 8000)
+    return () => clearInterval(timerRef.current)
+  }, [active.length])
+
+  if (leagues.some(l => l.loading) && active.length === 0) return <p className="media-loading">Loading scores…</p>
+  if (active.length === 0) return <p className="media-empty">No games this week</p>
+
+  const league = active[Math.min(idx, active.length - 1)]
 
   return (
-    <div className="scoreboard">
-      {loading && active.length === 0 && <p className="media-loading">Loading scores…</p>}
-      {!loading && active.length === 0 && <p className="media-empty">No games this week</p>}
-      {active.map(league => (
-        <div key={league.key} className={`scoreboard-league${league.featured ? ' scoreboard-league--featured' : ''}`}>
-          <div className="scoreboard-league__header">{league.label}</div>
-          <div className="scoreboard-league__games">
-            {league.games.map(g => <GameRow key={g.id} game={g} />)}
-          </div>
-        </div>
-      ))}
+    <div className="sports-carousel">
+      {/* League header with prev/next + dots */}
+      <div className="sports-carousel__header">
+        <button className="sports-carousel__nav" onClick={() => setIdx(i => (i - 1 + active.length) % active.length)}>‹</button>
+        <span className={`sports-carousel__league${league.featured ? ' sports-carousel__league--featured' : ''}`}>{league.label}</span>
+        <button className="sports-carousel__nav" onClick={() => setIdx(i => (i + 1) % active.length)}>›</button>
+      </div>
+      <div className="sports-carousel__dots">
+        {active.map((_, i) => (
+          <button key={i} className={`sports-dot${i === Math.min(idx, active.length - 1) ? ' sports-dot--active' : ''}`} onClick={() => setIdx(i)} aria-label={active[i].label} />
+        ))}
+      </div>
+      {/* Games list */}
+      <div className="sports-carousel__games">
+        {league.games.slice(0, 8).map(g => <GameCard key={g.id} game={g} />)}
+      </div>
     </div>
   )
 }
