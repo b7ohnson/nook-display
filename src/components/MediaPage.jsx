@@ -15,12 +15,18 @@ const APPS = [
   { name: 'ESPN',       url: 'https://espn.com',        bg: '#CC0000', fg: '#fff', icon: 'E' },
 ]
 
-function AppTile({ name, url, bg, fg, icon }) {
+function AppDock() {
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="app-tile">
-      <div className="app-tile-icon" style={{ background: bg, color: fg }}>{icon}</div>
-      <span className="app-tile-name">{name}</span>
-    </a>
+    <div className="media-dock">
+      <div className="media-dock__inner">
+        {APPS.map(a => (
+          <a key={a.name} href={a.url} target="_blank" rel="noopener noreferrer" className="media-dock__item">
+            <div className="media-dock__icon" style={{ background: a.bg, color: a.fg }}>{a.icon}</div>
+            <span className="media-dock__label">{a.name}</span>
+          </a>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -32,29 +38,33 @@ function timeAgo(dateStr) {
   return `${Math.round(diff / 1440)}d ago`
 }
 
-function NewsTiles({ feeds }) {
-  // Merge all feed items, tag each with its category
+function NewsPanel({ feeds }) {
   const items = feeds.flatMap(f =>
     f.items.map(item => ({ ...item, category: f.label }))
   )
   if (feeds.some(f => f.loading)) return <p className="media-loading">Loading news…</p>
   if (feeds.every(f => f.error))  return <p className="media-error">Could not load news</p>
+  if (items.length === 0)          return <p className="media-empty">No stories available</p>
+
+  const [hero, ...rest] = items.slice(0, 8)
 
   return (
-    <div className="news-tiles">
-      {items.slice(0, 10).map((item, i) => (
-        <a
-          key={i}
-          href={item.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`news-tile ${i % 3 === 0 ? 'news-tile--featured' : ''}`}
-        >
-          <span className="news-tile-cat">{item.category}</span>
-          <span className="news-tile-title">{item.title}</span>
-          {item.date && <span className="news-tile-age">{timeAgo(item.date)}</span>}
-        </a>
-      ))}
+    <div className="news-editorial">
+      <a href={hero.link} target="_blank" rel="noopener noreferrer" className="news-hero">
+        <span className="news-eyebrow">{hero.category}</span>
+        <h2 className="news-hero__title">{hero.title}</h2>
+        {hero.date && <span className="news-hero__time">{timeAgo(hero.date)}</span>}
+      </a>
+
+      <div className="news-supporting">
+        {rest.slice(0, 6).map((item, i) => (
+          <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" className="news-story">
+            <span className="news-eyebrow news-eyebrow--small">{item.category}</span>
+            <span className="news-story__title">{item.title}</span>
+            {item.date && <span className="news-story__time">{timeAgo(item.date)}</span>}
+          </a>
+        ))}
+      </div>
     </div>
   )
 }
@@ -62,35 +72,44 @@ function NewsTiles({ feeds }) {
 function GameRow({ game }) {
   const live = game.state === 'in'
   const done = game.state === 'post'
+  const pre  = game.state === 'pre'
   return (
-    <div className={`game-row ${live ? 'game-row--live' : ''}`}>
-      <div className="game-teams">
-        <span className="game-team">{game.away}</span>
-        {(live || done) && <span className="game-score">{game.awayScore}</span>}
-        <span className="game-vs">{live || done ? '–' : 'vs'}</span>
-        {(live || done) && <span className="game-score">{game.homeScore}</span>}
-        <span className="game-team">{game.home}</span>
+    <div className={`scoreboard-game${live ? ' scoreboard-game--live' : done ? ' scoreboard-game--final' : ' scoreboard-game--upcoming'}`}>
+      <div className="scoreboard-game__teams">
+        <span className="scoreboard-game__team">{game.away}</span>
+        {(live || done) ? (
+          <span className="scoreboard-game__scores">
+            <strong>{game.awayScore}</strong>
+            <span className="scoreboard-game__dash">–</span>
+            <strong>{game.homeScore}</strong>
+          </span>
+        ) : (
+          <span className="scoreboard-game__vs">vs</span>
+        )}
+        <span className="scoreboard-game__team">{game.home}</span>
       </div>
-      <span className={`game-status ${live ? 'game-status--live' : ''}`}>{game.detail}</span>
+      <span className="scoreboard-game__detail">
+        {live && <span className="scoreboard-live-dot" aria-label="Live" />}
+        {live ? 'LIVE' : game.detail || (pre ? game.date : '')}
+      </span>
     </div>
   )
 }
 
-function SportsTiles({ leagues }) {
-  const active = leagues.filter(l => !l.loading && l.games.length > 0)
+function SportsPanel({ leagues }) {
+  const active  = leagues.filter(l => !l.loading && l.games.length > 0)
   const loading = leagues.some(l => l.loading)
 
   return (
-    <div className="sports-tiles">
+    <div className="scoreboard">
       {loading && active.length === 0 && <p className="media-loading">Loading scores…</p>}
       {!loading && active.length === 0 && <p className="media-empty">No games this week</p>}
       {active.map(league => (
-        <div
-          key={league.key}
-          className={`sports-tile ${league.featured ? 'sports-tile--featured' : ''}`}
-        >
-          <div className="sports-tile-label">{league.label}</div>
-          {league.games.map(g => <GameRow key={g.id} game={g} />)}
+        <div key={league.key} className={`scoreboard-league${league.featured ? ' scoreboard-league--featured' : ''}`}>
+          <div className="scoreboard-league__header">{league.label}</div>
+          <div className="scoreboard-league__games">
+            {league.games.map(g => <GameRow key={g.id} game={g} />)}
+          </div>
         </div>
       ))}
     </div>
@@ -103,10 +122,7 @@ export default function MediaPage() {
 
   return (
     <div className="media-page">
-
-      <div className="app-launcher">
-        {APPS.map(a => <AppTile key={a.name} {...a} />)}
-      </div>
+      <AppDock />
 
       <div className="media-body">
         <div className="media-news-panel">
@@ -114,15 +130,17 @@ export default function MediaPage() {
             <IconNewspaper size={13} />
             News
           </div>
-          <NewsTiles feeds={newsFeeds} />
+          <NewsPanel feeds={newsFeeds} />
         </div>
+
+        <div className="media-divider" />
 
         <div className="media-sports-panel">
           <div className="media-panel-head">
             <IconTrophy size={13} />
             Sports — This Week
           </div>
-          <SportsTiles leagues={sportLeagues} />
+          <SportsPanel leagues={sportLeagues} />
         </div>
       </div>
     </div>
