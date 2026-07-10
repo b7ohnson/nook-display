@@ -193,31 +193,33 @@ export default function App() {
         ))}
       </nav>
 
-      <div hidden={page !== 'home'}>
-        <main className="app-main">
-          <aside className="left-panel">
-            <MiniCalendar events={events} legend={legend} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-            <RemindersPanel events={events} />
-            <GroceryList />
-          </aside>
-          <section className="right-panel">
-            <WeekView
-              events={events}
-              focusDate={selectedDate}
-              onSlotClick={(date, time, allDay) => anyConnected && setModal({ date, time, allDay })}
-              onEventClick={(event) => anyConnected && setModal({ event })}
-              onEventDrop={anyConnected ? handleEventDrop : undefined}
-            />
-          </section>
-        </main>
-        <footer className="app-footer">
-          <ChoreList />
-        </footer>
-      </div>
+      {page === 'home' && (
+        <>
+          <main className="app-main">
+            <aside className="left-panel">
+              <MiniCalendar events={events} legend={legend} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+              <RemindersPanel events={events} />
+              <GroceryList />
+            </aside>
+            <section className="right-panel">
+              <WeekView
+                events={events}
+                focusDate={selectedDate}
+                onSlotClick={(date, time, allDay) => anyConnected && setModal({ date, time, allDay })}
+                onEventClick={(event) => anyConnected && setModal({ event })}
+                onEventDrop={anyConnected ? handleEventDrop : undefined}
+              />
+            </section>
+          </main>
+          <footer className="app-footer">
+            <ChoreList />
+          </footer>
+        </>
+      )}
 
-      <div hidden={page !== 'media'}><MediaPage /></div>
-      <div hidden={page !== 'meals'}><MealPlanner /></div>
-      <div hidden={page !== 'games'} className="games-page"><GamesPage /></div>
+      {page === 'media' && <MediaPage />}
+      {page === 'meals' && <MealPlanner />}
+      {page === 'games' && <div className="games-page"><GamesPage /></div>}
 
       {modal && (
         <EventModal
