@@ -8,7 +8,7 @@ import GroceryList from './components/GroceryList'
 import MediaPage from './components/MediaPage'
 import MealPlanner from './components/MealPlanner'
 import EventModal from './components/EventModal'
-import { IconHome, IconTv, IconUtensils, IconSun, IconMoon, IconGamepad, IconSettings } from './components/Icons'
+import { IconHome, IconTv, IconUtensils, IconSun, IconMoon, IconGamepad, IconSettings, IconMusic } from './components/Icons'
 import GamesPage from './components/games/GamesPage'
 import PhotoSlideshow from './components/PhotoSlideshow'
 import LoginPage from './components/LoginPage'
@@ -22,6 +22,9 @@ import { useSettings } from './hooks/useSettings'
 import { events as mockEvents, familyMembers } from './data/mockData'
 import SettingsPanel from './components/SettingsPanel'
 import SpotifyBar from './components/SpotifyBar'
+import SpotifyPage from './components/SpotifyPage'
+import { SpotifyProvider } from './hooks/SpotifyContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import './App.css'
 
 const IDLE_MS  = 2 * 60 * 1000
@@ -58,6 +61,7 @@ function AccountBadge({ label, account }) {
 const TABS = [
   { id: 'home',  label: 'Home',         Icon: IconHome     },
   { id: 'media', label: 'Media',        Icon: IconTv       },
+  { id: 'music', label: 'Music',        Icon: IconMusic    },
   { id: 'meals', label: 'Meal Planner', Icon: IconUtensils },
   { id: 'games', label: 'Games',        Icon: IconGamepad  },
 ]
@@ -142,6 +146,7 @@ export default function App() {
   if (!user) return <LoginPage onSignIn={signIn} />
 
   return (
+    <SpotifyProvider>
     <div className="app">
       <h1 className="sr-only">NooK Family Display</h1>
       {isIdle && <PhotoSlideshow />}
@@ -226,9 +231,10 @@ export default function App() {
         </>
       )}
 
-      {page === 'media' && <MediaPage />}
-      {page === 'meals' && <MealPlanner />}
-      {page === 'games' && <div className="games-page"><GamesPage /></div>}
+      {page === 'media' && <ErrorBoundary><MediaPage /></ErrorBoundary>}
+      {page === 'music' && <ErrorBoundary><SpotifyPage /></ErrorBoundary>}
+      {page === 'meals' && <ErrorBoundary><MealPlanner /></ErrorBoundary>}
+      {page === 'games' && <ErrorBoundary><div className="games-page"><GamesPage /></div></ErrorBoundary>}
 
       <SettingsPanel
         open={showSettings}
@@ -252,5 +258,6 @@ export default function App() {
       )}
       <SpotifyBar />
     </div>
+    </SpotifyProvider>
   )
 }

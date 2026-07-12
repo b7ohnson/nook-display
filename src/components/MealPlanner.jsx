@@ -1,102 +1,109 @@
 import { useState } from 'react'
 import { useMeals } from '../hooks/useMeals'
 
-const SLOTS = [
-  { key: 'breakfast', label: 'Breakfast' },
-  { key: 'lunch',     label: 'Lunch'     },
-  { key: 'dinner',    label: 'Dinner'    },
-]
+const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner']
 
-function getWeekDays() {
+function getWeekDays(offset = 0) {
   const days  = []
   const today = new Date()
   const dow   = today.getDay()
   const mon   = new Date(today)
-  mon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1))
+  mon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7)
   for (let i = 0; i < 7; i++) {
     const d = new Date(mon)
     d.setDate(mon.getDate() + i)
     const pad = n => String(n).padStart(2, '0')
-    const str = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
     days.push({
-      date:    str,
-      dayName: d.toLocaleDateString('en-US', { weekday: 'short' }),
-      dayNum:  d.getDate(),
-      month:   d.toLocaleDateString('en-US', { month: 'short' }),
-      isToday: d.toDateString() === today.toDateString(),
+      dateStr,
+      label:     d.toLocaleDateString('en-US', { weekday: 'long' }),
+      shortDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      isToday:   d.toDateString() === today.toDateString(),
     })
   }
   return days
 }
 
-function MealCell({ value, onSave }) {
-  const [editing, setEditing] = useState(false)
-  const [draft,   setDraft]   = useState('')
+export default function MealPlanner() {
+  const { meals, setMeal } = useMeals()
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [editingKey, setEditingKey] = useState(null)
+  const [editValue, setEditValue]   = useState('')
 
-  const open  = () => { setDraft(value || ''); setEditing(true) }
-  const close = () => setEditing(false)
-  const commit = () => { onSave(draft.trim()); close() }
+  const days = getWeekDays(weekOffset)
 
-  if (editing) {
-    return (
-      <input
-        className="meal-cell-input"
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => {
-          if (e.key === 'Enter')  commit()
-          if (e.key === 'Escape') { setDraft(value || ''); close() }
-        }}
-        autoFocus
-        placeholder="Add meal…"
-      />
-    )
+  function weekLabel() {
+    if (weekOffset === 0)  return 'This Week'
+    if (weekOffset === 1)  return 'Next Week'
+    if (weekOffset === -1) return 'Last Week'
+    return `${days[0].shortDate} – ${days[6].shortDate}`
+  }
+
+  function handleSave(key) {
+    const date = key.slice(0, 10)
+    const slot = key.slice(11)
+    setMeal(date, slot, editValue.trim())
+    setEditingKey(null)
+    setEditValue('')
   }
 
   return (
-    <div className={`meal-cell ${value ? 'meal-cell--filled' : 'meal-cell--empty'}`} onClick={open}>
-      {value || <span className="meal-add">+</span>}
-    </div>
-  )
-}
-
-export default function MealPlanner() {
-  const { meals, synced, setMeal } = useMeals()
-  const days = getWeekDays()
-
-  return (
-    <div className="meal-page">
-      <div className="meal-page-header">
-        <span className="meal-page-title">Meal Planner</span>
-        <span className="meal-page-week">
-          {days[0].month} {days[0].dayNum} – {days[6].month} {days[6].dayNum}
-        </span>
-        {synced && <span className="meal-sync-dot" title="Synced" />}
+    <div className="menu-page">
+      <div className="menu-header">
+        <div className="menu-title-row">
+          <span className="menu-ornament">✦</span>
+          <h2 className="menu-title">Weekly Menu</h2>
+          <span className="menu-ornament">✦</span>
+        </div>
+        <div className="menu-week-nav">
+          <button className="menu-nav-btn" onClick={() => setWeekOffset(o => o - 1)}>‹</button>
+          <span className="menu-week-label">{weekLabel()}</span>
+          <button className="menu-nav-btn" onClick={() => setWeekOffset(o => o + 1)}>›</button>
+        </div>
       </div>
 
-      <div className="meal-grid">
-        {/* Column headers */}
-        <div className="meal-grid-corner" />
-        {days.map(d => (
-          <div key={d.date} className={`meal-col-head ${d.isToday ? 'meal-col-head--today' : ''}`}>
-            <span className="meal-day-name">{d.dayName}</span>
-            <span className="meal-day-num">{d.dayNum}</span>
+      <div className="menu-body">
+        {days.map(day => (
+          <div key={day.dateStr} className={`menu-day${day.isToday ? ' menu-day--today' : ''}`}>
+            <div className="menu-day-header">
+              <span className="menu-day-name">{day.label}</span>
+              <span className="menu-day-date">{day.shortDate}</span>
+            </div>
+            <div className="menu-day-rule" />
+            <div className="menu-day-items">
+              {MEAL_TYPES.map(type => {
+                const key = `${day.dateStr}-${type.toLowerCase()}`
+                const saved = meals[day.dateStr]?.[type.toLowerCase()] || ''
+                const isEditing = editingKey === key
+                return (
+                  <div key={type} className={`menu-item${isEditing ? ' menu-item--editing' : ''}`}>
+                    <span className="menu-item-type">{type}</span>
+                    {isEditing ? (
+                      <input
+                        className="menu-item-input"
+                        autoFocus
+                        value={editValue}
+                        onChange={e => setEditValue(e.target.value)}
+                        onBlur={() => handleSave(key)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleSave(key)
+                          if (e.key === 'Escape') { setEditingKey(null); setEditValue('') }
+                        }}
+                        placeholder={`Add ${type.toLowerCase()}…`}
+                      />
+                    ) : (
+                      <button
+                        className={`menu-item-name${!saved ? ' menu-item-name--empty' : ''}`}
+                        onClick={() => { setEditingKey(key); setEditValue(saved) }}
+                      >
+                        {saved || '— add —'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        ))}
-
-        {/* Slot rows */}
-        {SLOTS.map(slot => (
-          <>
-            <div key={slot.key + '-label'} className="meal-slot-label">{slot.label}</div>
-            {days.map(d => (
-              <MealCell
-                key={d.date + slot.key}
-                value={meals[d.date]?.[slot.key]}
-                onSave={v => setMeal(d.date, slot.key, v)}
-              />
-            ))}
-          </>
         ))}
       </div>
     </div>

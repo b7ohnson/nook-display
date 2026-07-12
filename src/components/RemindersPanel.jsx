@@ -12,7 +12,7 @@ function fmtTime(t) {
 }
 
 export default function RemindersPanel({ events = [] }) {
-  const { tasks } = useTasks()
+  const { tasks, toggle } = useTasks()
 
   const today    = dateStr(new Date())
   const tomorrow = dateStr(new Date(Date.now() + 86400000))
@@ -26,8 +26,8 @@ export default function RemindersPanel({ events = [] }) {
     [events, tomorrow])
 
   const pendingTasks = useMemo(() => [
-    ...(tasks.blessing || []).filter(t => !t.done).map(t => ({ ...t, who: 'Blessing' })),
-    ...(tasks.pearl    || []).filter(t => !t.done).map(t => ({ ...t, who: 'Pearl'    })),
+    ...(tasks.blessing || []).filter(t => !t.done).map(t => ({ ...t, who: 'Blessing', memberId: 'blessing' })),
+    ...(tasks.pearl    || []).filter(t => !t.done).map(t => ({ ...t, who: 'Pearl',    memberId: 'pearl'    })),
   ].slice(0, 5), [tasks])
 
   const hasContent = todayEvts.length || tomorrowEvts.length || pendingTasks.length
@@ -75,7 +75,11 @@ export default function RemindersPanel({ events = [] }) {
           <div className="reminders-label">Open Tasks</div>
           {pendingTasks.map(t => (
             <div key={t.id} className="reminder-row">
-              <div className="reminder-dot reminder-dot--task" />
+              <button
+                className="reminder-task-toggle"
+                onClick={() => toggle(t.memberId, t.id)}
+                aria-label="Mark complete"
+              />
               <div className="reminder-body">
                 <div className="reminder-title">{t.task}</div>
                 <div className="reminder-meta">{t.who}</div>

@@ -14,6 +14,7 @@ export default function WeatherWidget() {
           {!real && <span className="weather-mock"> (mock)</span>}
         </div>
         <div className="weather-condition">{w.condition} · H:{w.high}° L:{w.low}°</div>
+        {w.feelsLike != null && <div className="weather-feels">Feels like {w.feelsLike}°</div>}
         <div className="weather-location">{w.location}</div>
       </div>
     </div>

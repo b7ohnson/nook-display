@@ -123,12 +123,13 @@ function GameCard({ game }) {
 function SportsPanel({ leagues }) {
   const active = leagues.filter(l => !l.loading && l.games.length > 0)
   const [idx, setIdx] = useState(0)
-  const timerRef = useRef(null)
+  const timerRef  = useRef(null)
+  const pausedRef = useRef(false)
 
   useEffect(() => {
     if (active.length <= 1) return
     timerRef.current = setInterval(() => {
-      setIdx(i => (i + 1) % active.length)
+      if (!pausedRef.current) setIdx(i => (i + 1) % active.length)
     }, 8000)
     return () => clearInterval(timerRef.current)
   }, [active.length])
@@ -139,7 +140,10 @@ function SportsPanel({ leagues }) {
   const league = active[Math.min(idx, active.length - 1)]
 
   return (
-    <div className="sports-carousel">
+    <div className="sports-carousel"
+      onMouseEnter={() => { pausedRef.current = true }}
+      onMouseLeave={() => { pausedRef.current = false }}
+    >
       {/* League header with prev/next + dots */}
       <div className="sports-carousel__header">
         <button className="sports-carousel__nav" onClick={() => setIdx(i => (i - 1 + active.length) % active.length)}>‹</button>
