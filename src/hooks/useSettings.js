@@ -1,4 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { db } from '../firebase'
+
+const DOC_REF = () => doc(db, 'skylight', 'settings')
 
 const DEFAULTS = {
   textSize:  'default', // 'small' | 'default' | 'large' | 'xl'
@@ -13,14 +17,34 @@ const FONT_FAMILIES = {
   serif:  "Georgia, 'Times New Roman', serif",
 }
 
+function loadCached() {
+  try {
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('nook_settings') || '{}') }
+  } catch {
+    return { ...DEFAULTS }
+  }
+}
+
 export function useSettings() {
-  const [settings, setSettings] = useState(() => {
-    try {
-      return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('nook_settings') || '{}') }
-    } catch {
-      return { ...DEFAULTS }
-    }
-  })
+  const [settings, setSettings] = useState(loadCached)
+  const initial = useRef(settings)
+
+  // Local cache is the instant-boot value; Firestore is the source of truth
+  // once it loads, so settings follow the device even after localStorage is gone.
+  useEffect(() => {
+    const unsub = onSnapshot(
+      DOC_REF(),
+      (snap) => {
+        if (snap.exists()) {
+          setSettings(prev => ({ ...prev, ...snap.data() }))
+        } else {
+          setDoc(DOC_REF(), initial.current).catch(() => {})
+        }
+      },
+      () => {} // offline/error: keep using local cache
+    )
+    return unsub
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -30,6 +54,10 @@ export function useSettings() {
     localStorage.setItem('nook_settings', JSON.stringify(settings))
   }, [settings])
 
-  const update = (key, value) => setSettings(prev => ({ ...prev, [key]: value }))
+  const update = (key, value) => {
+    setSettings(prev => ({ ...prev, [key]: value }))
+    setDoc(DOC_REF(), { [key]: value }, { merge: true }).catch(() => {})
+  }
+
   return { settings, update }
 }
