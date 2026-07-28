@@ -1,12 +1,79 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Game rooms are intentionally public (unauthenticated players join via QR)
+
+    // Game rooms are joinable by unauthenticated players via QR code, so
+    // reads and some writes are public. The display app is always signed in
+    // (App.jsx gates on Firebase Auth), so it gets the wider permissions and
+    // anonymous players get a narrow slot: they may only touch `players`, and
+    // only while the room is inside its 2h lifetime.
     match /gameRooms/{roomCode} {
-      allow read, write: if true;
+
+      // The exact document createRoom() writes: fixed field set, server
+      // timestamp, no players yet.
+      function wellFormedNewRoom() {
+        return request.resource.data.keys().hasOnly(
+                 ['code', 'game', 'state', 'players', 'payload', 'createdAt'])
+            && request.resource.data.keys().hasAll(
+                 ['code', 'game', 'state', 'players', 'payload', 'createdAt'])
+            && request.resource.data.code == roomCode
+            && request.resource.data.game is string
+            && request.resource.data.state is string
+            && request.resource.data.players is list
+            && request.resource.data.players.size() == 0
+            && request.resource.data.createdAt == request.time;
+      }
+
+      // Rooms are dead 2h after creation. useGameRoom already hides them in
+      // the UI at that point; this stops writes reaching a stale room at all.
+      function roomIsLive() {
+        return resource.data.createdAt is timestamp
+            && request.time < resource.data.createdAt + duration.value(2, 'h');
+      }
+
+      function playersFieldIsSane() {
+        return request.resource.data.players is list
+            && request.resource.data.players.size() <= 16;
+      }
+
+      // Anonymous players (addPlayer / updatePlayer) rewrite `players` and
+      // nothing else — no touching createdAt, game, state, or payload.
+      function onlyPlayersChanged() {
+        return request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['players']);
+      }
+
+      allow read: if true;
+
+      // Only the signed-in display opens a room.
+      allow create: if request.auth != null && wellFormedNewRoom();
+
+      allow update: if
+        // createRoom() uses setDoc() with no merge, so reopening a room at a
+        // code that still has a stale document counts as an update, not a
+        // create. Let the display reclaim it with a fresh, well-formed room.
+        (request.auth != null && wellFormedNewRoom())
+        // Normal in-game writes, while the room is still alive.
+        || (roomIsLive()
+            && playersFieldIsSane()
+            && (request.auth != null || onlyPlayersChanged()));
+
+      allow delete: if request.auth != null;
     }
-    // All other collections require Firebase Auth
-    match /{document=**} {
+
+    // Everything else is display-driven and requires Firebase Auth. These are
+    // listed per collection rather than as a `/{document=**}` catch-all: that
+    // recursive wildcard also matches /gameRooms/{roomCode}, and because
+    // Firestore grants access if *any* matching rule allows, it silently
+    // bypassed every restriction above for signed-in users.
+    // Adding a new collection means adding it here — default is deny.
+    match /skylight/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    match /scores/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    match /gameContent/{document=**} {
       allow read, write: if request.auth != null;
     }
   }
