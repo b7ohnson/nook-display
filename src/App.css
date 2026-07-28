@@ -1466,8 +1466,34 @@
   justify-content: center;
   font-size: 1.4rem;
   font-weight: 900;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.22);
   letter-spacing: -0.5px;
+  /* Top highlight and inner edge give the flat brand colour some dimension so
+     the tiles read as app icons rather than coloured squares. */
+  background-image: linear-gradient(160deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 55%);
+  box-shadow:
+    0 4px 14px rgba(0,0,0,0.22),
+    inset 0 1px 0 rgba(255,255,255,0.25),
+    inset 0 0 0 1px rgba(0,0,0,0.06);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+/* Longer monograms step down so they stay inside the tile. */
+.media-dock__icon[data-len="2"] { font-size: 1.15rem; }
+.media-dock__icon[data-len="3"] { font-size: 0.95rem; letter-spacing: -0.3px; }
+
+.media-dock__item:hover .media-dock__icon,
+.media-dock__item:focus-visible .media-dock__icon {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 20px rgba(0,0,0,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.3),
+    inset 0 0 0 1px rgba(0,0,0,0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-dock__icon { transition: none; }
+  .media-dock__item:hover .media-dock__icon,
+  .media-dock__item:focus-visible .media-dock__icon { transform: none; }
 }
 
 .media-dock__label {

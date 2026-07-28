@@ -3,17 +3,28 @@ import { useNews }   from '../hooks/useNews'
 import { useSports } from '../hooks/useSports'
 import { IconNewspaper, IconTrophy } from './Icons'
 
+// Brand-coloured monograms rather than the services' actual logos. Those are
+// trademarks: Simple Icons, the usual CC0 source for them, no longer carries
+// Disney+, Hulu, Prime Video, Peacock or ESPN because the holders asked for
+// removal, so half the dock would fall back to letters anyway and the rest
+// would have to come from somewhere less careful. A consistent set reads better
+// on a wall than a mixed one.
+//
+// Monograms are unique across the dock — Prime and Peacock previously shared a
+// bare "P" — and each tile is labelled underneath regardless.
 const APPS = [
-  { name: 'Netflix',    url: 'https://netflix.com',     bg: '#E50914', fg: '#fff', icon: 'N' },
-  { name: 'YouTube',    url: 'https://youtube.com',     bg: '#FF0000', fg: '#fff', icon: '▶' },
-  { name: 'Disney+',    url: 'https://disneyplus.com',  bg: '#113CCF', fg: '#fff', icon: 'D+' },
-  { name: 'Hulu',       url: 'https://hulu.com',        bg: '#1CE783', fg: '#000', icon: 'H' },
-  { name: 'Max',        url: 'https://max.com',         bg: '#002BE7', fg: '#fff', icon: 'M' },
-  { name: 'Prime',      url: 'https://primevideo.com',  bg: '#00A8E1', fg: '#fff', icon: 'P' },
-  { name: 'Apple TV+',  url: 'https://tv.apple.com',    bg: '#1c1c1e', fg: '#fff', icon: '' },
-  { name: 'Spotify',    url: 'https://spotify.com',     bg: '#1DB954', fg: '#fff', icon: 'S' },
-  { name: 'Peacock',    url: 'https://peacocktv.com',   bg: '#F5C542', fg: '#000', icon: 'P' },
-  { name: 'ESPN',       url: 'https://espn.com',        bg: '#CC0000', fg: '#fff', icon: 'E' },
+  { name: 'Netflix',    url: 'https://netflix.com',     bg: '#E50914', fg: '#fff', icon: 'N'   },
+  { name: 'YouTube',    url: 'https://youtube.com',     bg: '#FF0000', fg: '#fff', icon: '▶'   },
+  { name: 'Disney+',    url: 'https://disneyplus.com',  bg: '#113CCF', fg: '#fff', icon: 'D+'  },
+  { name: 'Hulu',       url: 'https://hulu.com',        bg: '#1CE783', fg: '#000', icon: 'h'   },
+  { name: 'Max',        url: 'https://max.com',         bg: '#002BE7', fg: '#fff', icon: 'M'   },
+  { name: 'Prime',      url: 'https://primevideo.com',  bg: '#00A8E1', fg: '#fff', icon: 'pv'  },
+  // Was an empty string, so this tile rendered blank. It previously held
+  // Apple's  glyph, which is private-use and would show as a box on the Pi.
+  { name: 'Apple TV+',  url: 'https://tv.apple.com',    bg: '#1c1c1e', fg: '#fff', icon: 'tv+' },
+  { name: 'Spotify',    url: 'https://spotify.com',     bg: '#1DB954', fg: '#fff', icon: 'S'   },
+  { name: 'Peacock',    url: 'https://peacocktv.com',   bg: '#F5C542', fg: '#000', icon: 'pk'  },
+  { name: 'ESPN',       url: 'https://espn.com',        bg: '#CC0000', fg: '#fff', icon: 'E'   },
 ]
 
 function AppDock() {
@@ -22,7 +33,16 @@ function AppDock() {
       <div className="media-dock__inner">
         {APPS.map(a => (
           <a key={a.name} href={a.url} target="_blank" rel="noopener noreferrer" className="media-dock__item">
-            <div className="media-dock__icon" style={{ background: a.bg, color: a.fg }}>{a.icon}</div>
+            {/* data-len drives the type scale so "tv+" is not set at the same
+                size as "N" and overflow its tile. */}
+            <div
+              className="media-dock__icon"
+              data-len={a.icon.length}
+              style={{ background: a.bg, color: a.fg }}
+              aria-hidden="true"
+            >
+              {a.icon}
+            </div>
             <span className="media-dock__label">{a.name}</span>
           </a>
         ))}
