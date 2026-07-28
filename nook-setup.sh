@@ -264,6 +264,33 @@ DESKTOP
 chown -R "${NOOK_USER}:${NOOK_USER}" "${NOOK_HOME}/.config"
 log "Autostart configured (LXDE + XDG)"
 
+# ── Nightly browser restart ───────────────────────────────────
+step "Scheduling nightly browser restart"
+
+# The display registers a service worker, which serves the app shell from
+# cache so a Wi-Fi drop does not blank the screen. The trade-off is that a
+# newly deployed build installs as a *waiting* worker and does not take over
+# while a tab stays open — a reload is not enough, the clients have to close.
+# An always-on kiosk never closes anything, so without this it would keep
+# serving the build it booted with indefinitely.
+#
+# Killing Chromium is all that is needed: the launcher above supervises it in
+# a while-loop and relaunches after 5s, at which point the waiting worker
+# activates and the newest build loads. The profile is deliberately left
+# alone — wiping it here would sign the display out of Google and Spotify.
+CRON_MARK="# NooK nightly restart (picks up new deploys — see nook-setup.sh)"
+CRON_JOB="0 4 * * * pkill -f 'chromium-browser.*nook-chromium-profile'"
+
+CURRENT_CRON=$(crontab -u "$NOOK_USER" -l 2>/dev/null || true)
+if echo "$CURRENT_CRON" | grep -qF "NooK nightly restart"; then
+  log "Nightly restart already scheduled"
+else
+  printf '%s\n%s\n%s\n' "$CURRENT_CRON" "$CRON_MARK" "$CRON_JOB" \
+    | grep -v '^$' \
+    | crontab -u "$NOOK_USER" -
+  log "Nightly restart scheduled for 04:00"
+fi
+
 # ── Screensaver / blanking ────────────────────────────────────
 step "Disabling screen blanking at system level"
 
