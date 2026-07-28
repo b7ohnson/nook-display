@@ -44,7 +44,10 @@ function NewsPanel({ feeds }) {
     f.items.map(item => ({ ...item, category: f.label }))
   )
   if (feeds.some(f => f.loading)) return <p className="media-loading">Loading news…</p>
-  if (feeds.every(f => f.error))  return <p className="media-error">Could not load news</p>
+  // Only surface the error when there is genuinely nothing to show. useNews
+  // keeps the last good headlines and marks them stale, so a feed-service
+  // outage should leave yesterday's stories on the wall rather than a message.
+  if (items.length === 0 && feeds.every(f => f.error)) return <p className="media-error">Could not load news</p>
   if (items.length === 0)          return <p className="media-empty">No stories available</p>
 
   const [hero, ...rest] = items.slice(0, 8)
