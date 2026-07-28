@@ -47,6 +47,39 @@ function writeCache(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* quota or private mode */ }
 }
 
+const HOURLY_COUNT = 6
+
+/**
+ * Next few hours from open-meteo's hourly arrays.
+ *
+ * `timezone=auto` means hourly.time entries are local wall-clock strings with
+ * no offset ("2026-07-28T15:00"), so they are compared as text against the same
+ * rendering of "now" rather than parsed — parsing them as Date would have the
+ * browser read them as local time, which is right only when the display's
+ * timezone matches the forecast's.
+ */
+function buildHourly(hourly) {
+  if (!hourly?.time || !hourly?.temperature_2m) return []
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}`
+
+  let start = hourly.time.findIndex(t => t.slice(0, 13) > stamp)
+  if (start < 0) return []
+
+  return hourly.time.slice(start, start + HOURLY_COUNT).map((t, i) => {
+    const hour = Number(t.slice(11, 13))
+    const info = wmoInfo(hourly.weather_code?.[start + i])
+    return {
+      time: t,
+      label: `${hour % 12 === 0 ? 12 : hour % 12}${hour < 12 ? 'a' : 'p'}`,
+      temp: Math.round(hourly.temperature_2m[start + i]),
+      icon: info.icon,
+      condition: info.label,
+    }
+  }).filter(h => Number.isFinite(h.temp))
+}
+
 function wmoInfo(code) {
   if (WMO[code]) return WMO[code]
   const keys = Object.keys(WMO).map(Number).sort((a, b) => a - b)
@@ -112,8 +145,10 @@ export function useWeather() {
           `https://api.open-meteo.com/v1/forecast` +
           `?latitude=${coords.lat}&longitude=${coords.lon}` +
           `&current=temperature_2m,apparent_temperature,weather_code` +
+          `&hourly=temperature_2m,weather_code` +
           `&daily=temperature_2m_max,temperature_2m_min` +
-          `&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`
+          // Two days so the strip can run past midnight without falling short.
+          `&temperature_unit=fahrenheit&timezone=auto&forecast_days=2`
         )
         if (!res.ok) throw new Error(`Weather API returned ${res.status}`)
         const data = await res.json()
@@ -126,6 +161,7 @@ export function useWeather() {
         const info = wmoInfo(cur.weather_code)
         const { city, state } = cityRef.current
         const next = {
+          hourly: buildHourly(data.hourly),
           temp:      Math.round(cur.temperature_2m),
           feelsLike: Math.round(cur.apparent_temperature),
           condition: info.label,

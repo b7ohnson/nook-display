@@ -154,6 +154,45 @@
   margin-left: 4px;
 }
 
+/* Hourly strip, sitting to the right of the current conditions. Separated by a
+   rule rather than a gap so the widget still reads as one block from across a
+   room. Hidden on narrow viewports — the header has no room for it there, and
+   the display it targets is a landscape TV. */
+.weather-hourly {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 0 4px;
+  padding: 0 0 0 14px;
+  list-style: none;
+  border-left: 1px solid var(--border);
+}
+
+.weather-hourly__slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 26px;
+}
+
+.weather-hourly__hour {
+  font-size: 0.6rem;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+.weather-hourly__icon { font-size: 0.95rem; line-height: 1.1; }
+
+.weather-hourly__temp {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+@media (max-width: 1100px) {
+  .weather-hourly { display: none; }
+}
+
 /* ── Header right (weather + auth) ──────────── */
 .header-right {
   display: flex;

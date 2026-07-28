@@ -13,6 +13,33 @@ const LEAGUES = [
   { key: 'worldcup',   label: 'World Cup',       path: 'soccer/fifa.world/scoreboard', featured: true  },
 ]
 
+/**
+ * VITE_FAVORITE_LEAGUES is a comma-separated list of the keys above, e.g.
+ *
+ *   VITE_FAVORITE_LEAGUES=nba,epl
+ *
+ * It controls which leagues are fetched at all, not just which are displayed —
+ * every league here is a separate ESPN request every five minutes, so narrowing
+ * it cuts eight requests down to the ones the family actually watches. Order is
+ * preserved, so the first key listed leads the carousel. Unset, or set to keys
+ * that match nothing, falls back to all leagues with the `featured` ones first.
+ */
+const FAVORITES = (import.meta.env.VITE_FAVORITE_LEAGUES || '')
+  .split(',')
+  .map(s => s.trim().toLowerCase())
+  .filter(Boolean)
+
+const ACTIVE_LEAGUES = (() => {
+  if (FAVORITES.length) {
+    const picked = FAVORITES
+      .map(key => LEAGUES.find(l => l.key === key))
+      .filter(Boolean)
+    if (picked.length) return picked
+    console.warn('VITE_FAVORITE_LEAGUES matched no known leagues — showing all')
+  }
+  return [...LEAGUES].sort((a, b) => Number(b.featured) - Number(a.featured))
+})()
+
 let cache = null
 let cacheTime = 0
 
@@ -65,7 +92,7 @@ function parseGames(data) {
 
 export function useSports() {
   const [leagues, setLeagues] = useState(
-    LEAGUES.map(l => ({ ...l, games: [], loading: true, error: null }))
+    ACTIVE_LEAGUES.map(l => ({ ...l, games: [], loading: true, error: null }))
   )
 
   useEffect(() => {
@@ -74,8 +101,8 @@ export function useSports() {
         setLeagues(cache)
         return
       }
-      let remaining = LEAGUES.length
-      LEAGUES.forEach((league, idx) => {
+      let remaining = ACTIVE_LEAGUES.length
+      ACTIVE_LEAGUES.forEach((league, idx) => {
         fetch(`${BASE}/${league.path}?limit=50`)
           .then(r => r.json())
           .then(data => {
