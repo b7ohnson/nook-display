@@ -68,7 +68,25 @@ const TABS = [
 
 export default function App() {
   const { user, loading: authLoading, signIn, logOut } = useAuth()
+  // Theme is applied to <html>, so it has to cover the login screen too.
   const { dark, toggle: toggleDark } = useDarkMode()
+
+  if (authLoading) return (
+    <div className="auth-loading">
+      <div className="auth-loading-spinner" />
+    </div>
+  )
+
+  if (!user) return <LoginPage onSignIn={signIn} />
+
+  return <SignedInApp user={user} logOut={logOut} dark={dark} toggleDark={toggleDark} />
+}
+
+// Everything that reads Firestore or Google Calendar lives below the auth gate.
+// React runs hooks unconditionally, so while these sat in App() they subscribed
+// before sign-in and every cold load logged permission-denied against rules that
+// correctly require auth.
+function SignedInApp({ user, logOut, dark, toggleDark }) {
   const { toasts, dismiss } = useNotifications()
   const { settings, update: updateSetting } = useSettings()
   const [showSettings, setShowSettings] = useState(false)
@@ -136,14 +154,6 @@ export default function App() {
       window.removeEventListener('touchstart', wake)
     }
   }, [])
-
-  if (authLoading) return (
-    <div className="auth-loading">
-      <div className="auth-loading-spinner" />
-    </div>
-  )
-
-  if (!user) return <LoginPage onSignIn={signIn} />
 
   return (
     <SpotifyProvider>
