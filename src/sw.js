@@ -6,13 +6,24 @@ import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 // The display is wall-mounted and unattended, so a new build has to take over
-// without anyone walking over to the TV. Claiming clients immediately means the
-// running page keeps the JS it already loaded — every chunk is imported eagerly
-// at boot, so nothing goes looking for an asset that cleanup just removed. If
-// tab content is ever moved behind React.lazy, revisit this: a lazily-loaded
-// chunk requested after an update would 404 against the new precache.
+// without anyone walking over to the TV.
+//
+// A top-level self.skipWaiting() alone was not enough: the freshly installed
+// worker sat in `waiting` while the page kept running the previous bundle from
+// the precache. main.jsx therefore drives the handoff explicitly through
+// workbox-window, which posts SKIP_WAITING and reloads once the new worker
+// takes control. The top-level call stays as a belt-and-braces fast path.
+//
+// Claiming clients means the running page keeps the JS it already loaded, which
+// is safe today because every chunk is imported eagerly at boot. If tab content
+// later moves behind React.lazy, revisit this: a lazily-loaded chunk requested
+// after an update could 404 against the new precache.
 self.skipWaiting()
 clientsClaim()
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
+})
 
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)

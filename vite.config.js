@@ -15,6 +15,10 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       registerType: 'autoUpdate',
+      // With injectManifest, the auto-injected snippet only calls register()
+      // and never reloads, so a deployed build sat in `waiting` while the TV
+      // kept serving the old bundle from cache. main.jsx registers instead.
+      injectRegister: null,
       injectManifest: {
         // The firebase chunk alone is ~700 kB, over Workbox's 2 MiB default
         // once the games chunk and CSS are included.

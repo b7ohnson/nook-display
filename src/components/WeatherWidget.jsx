@@ -2,7 +2,7 @@ import { useWeather } from '../hooks/useWeather'
 import { weather as mockWeather } from '../data/mockData'
 
 export default function WeatherWidget() {
-  const { weather: real } = useWeather()
+  const { weather: real, stale } = useWeather()
   const w = real || mockWeather
 
   return (
@@ -12,6 +12,7 @@ export default function WeatherWidget() {
         <div className="weather-temp">
           {w.temp}°<span className="weather-unit">F</span>
           {!real && <span className="weather-mock"> (mock)</span>}
+          {real && stale && <span className="weather-mock" title="Showing the last reading — the weather service is unreachable"> (offline)</span>}
         </div>
         <div className="weather-condition">{w.condition} · H:{w.high}° L:{w.low}°</div>
         {w.feelsLike != null && <div className="weather-feels">Feels like {w.feelsLike}°</div>}
