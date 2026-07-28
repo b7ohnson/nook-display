@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { doc, updateDoc } from 'firebase/firestore'
+import { gameRoom } from 'nook-core/paths'
 import { db } from '../../firebase'
 import GamePanel from './GamePanel'
 import { JEOPARDY_BOARDS } from '../../data/jeopardySeed'
@@ -69,7 +70,7 @@ export default function Jeopardy({ onExit }) {
 
   // Create room on mount
   useEffect(() => {
-    roomDocRef.current = doc(db, 'gameRooms', roomCode)
+    roomDocRef.current = doc(db, ...gameRoom(roomCode))
     if (roomCreated.current) return
     roomCreated.current = true
     createRoom('jeopardy')

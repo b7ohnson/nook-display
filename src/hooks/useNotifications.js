@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
+import { TASKS } from 'nook-core/paths'
 import { db } from '../firebase'
 
 export function useNotifications() {
@@ -19,7 +20,7 @@ export function useNotifications() {
 
   // Watch tasks
   useEffect(() => {
-    return onSnapshot(doc(db, 'skylight', 'tasks'), snap => {
+    return onSnapshot(doc(db, ...TASKS), snap => {
       const data = snap.exists() ? snap.data() : {}
       const all  = [
         ...(data.blessing || []).map(t => ({ ...t, who: 'Blessing' })),

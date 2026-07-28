@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { doc, updateDoc } from 'firebase/firestore'
+import { gameRoom } from 'nook-core/paths'
 import { db } from '../../firebase'
 import GamePanel from './GamePanel'
 import { useGameContent } from '../../hooks/useGameContent'
@@ -52,7 +53,7 @@ export default function TriviaShowdown({ onExit }) {
   const currentQ = questions[payload.questionIndex ?? 0]
 
   useEffect(() => {
-    roomDocRef.current = doc(db, 'gameRooms', roomCode)
+    roomDocRef.current = doc(db, ...gameRoom(roomCode))
     if (roomCreated.current) return
     roomCreated.current = true
     createRoom('showdown')

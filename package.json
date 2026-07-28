@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "firebase": "^12.15.0",
+    "nook-core": "file:../nook-core",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

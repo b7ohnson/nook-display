@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { doc, updateDoc } from 'firebase/firestore'
+import { gameRoom } from 'nook-core/paths'
 import { db } from '../../firebase'
 import GamePanel from './GamePanel'
 import { FEUD_SURVEYS, FAST_MONEY_QUESTIONS } from '../../data/familyFeudSeed'
@@ -97,7 +98,7 @@ export default function FamilyFeud({ onExit }) {
   )
 
   useEffect(() => {
-    roomDocRef.current = doc(db, 'gameRooms', roomCode)
+    roomDocRef.current = doc(db, ...gameRoom(roomCode))
     if (roomCreated.current) return
     roomCreated.current = true
     createRoom('feud')
