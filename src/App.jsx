@@ -1,15 +1,13 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react'
+import { lazyWithReload } from './utils/lazyWithReload'
 import Clock from './components/Clock'
 import WeatherWidget from './components/WeatherWidget'
 import MiniCalendar from './components/MiniCalendar'
 import WeekView from './components/WeekView'
 import ChoreList from './components/ChoreList'
 import GroceryList from './components/GroceryList'
-import MediaPage from './components/MediaPage'
-import MealPlanner from './components/MealPlanner'
 import EventModal from './components/EventModal'
 import { IconHome, IconTv, IconUtensils, IconSun, IconMoon, IconGamepad, IconSettings, IconMusic } from './components/Icons'
-import GamesPage from './components/games/GamesPage'
 import PhotoSlideshow from './components/PhotoSlideshow'
 import LoginPage from './components/LoginPage'
 import RemindersPanel from './components/RemindersPanel'
@@ -22,13 +20,30 @@ import { useSettings } from './hooks/useSettings'
 import { events as mockEvents, familyMembers } from './data/mockData'
 import SettingsPanel from './components/SettingsPanel'
 import SpotifyBar from './components/SpotifyBar'
-import SpotifyPage from './components/SpotifyPage'
 import { SpotifyProvider } from './hooks/SpotifyContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './App.css'
 
+// The four tab bodies are the bulk of the bundle and only one is ever on
+// screen. Loaded on demand so the Pi boots the home tab without parsing the
+// games engine, the Spotify browser and the meal planner first.
+const MediaPage   = lazyWithReload(() => import('./components/MediaPage'))
+const SpotifyPage = lazyWithReload(() => import('./components/SpotifyPage'))
+const MealPlanner = lazyWithReload(() => import('./components/MealPlanner'))
+const GamesPage   = lazyWithReload(() => import('./components/games/GamesPage'))
+
 const IDLE_MS  = 2 * 60 * 1000
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
+
+// Shown while a tab's chunk loads. Reuses the existing auth spinner so a tab
+// switch looks the same as the rest of the app rather than flashing bare text.
+function TabLoading() {
+  return (
+    <div className="auth-loading">
+      <div className="auth-loading-spinner" />
+    </div>
+  )
+}
 
 function normalizeMock(raw) {
   const memberMap = Object.fromEntries(familyMembers.map(m => [m.id, m]))
@@ -241,10 +256,13 @@ function SignedInApp({ user, logOut, dark, toggleDark }) {
         </>
       )}
 
-      {page === 'media' && <ErrorBoundary><MediaPage /></ErrorBoundary>}
-      {page === 'music' && <ErrorBoundary><SpotifyPage /></ErrorBoundary>}
-      {page === 'meals' && <ErrorBoundary><MealPlanner /></ErrorBoundary>}
-      {page === 'games' && <ErrorBoundary><div className="games-page"><GamesPage /></div></ErrorBoundary>}
+      {/* ErrorBoundary outside Suspense so a chunk that fails even after the
+          reload in lazyWithReload surfaces as the tab's error state rather
+          than taking the whole display down. */}
+      {page === 'media' && <ErrorBoundary><Suspense fallback={<TabLoading />}><MediaPage /></Suspense></ErrorBoundary>}
+      {page === 'music' && <ErrorBoundary><Suspense fallback={<TabLoading />}><SpotifyPage /></Suspense></ErrorBoundary>}
+      {page === 'meals' && <ErrorBoundary><Suspense fallback={<TabLoading />}><MealPlanner /></Suspense></ErrorBoundary>}
+      {page === 'games' && <ErrorBoundary><Suspense fallback={<TabLoading />}><div className="games-page"><GamesPage /></div></Suspense></ErrorBoundary>}
 
       <SettingsPanel
         open={showSettings}

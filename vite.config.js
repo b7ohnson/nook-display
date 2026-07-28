@@ -44,17 +44,13 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          // Firebase stays manual: it is shared by the shell and several tabs,
+          // so leaving it to the splitter duplicates it across chunks.
+          //
+          // The games chunk used to be listed here too. It is now driven by the
+          // React.lazy boundary in App.jsx instead — a manual chunk would pull
+          // the games back into the initial graph and undo the split.
           'firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
-          'games': [
-            './src/components/games/FamilyFeud.jsx',
-            './src/components/games/Jeopardy.jsx',
-            './src/components/games/Tetris.jsx',
-            './src/components/games/Trivia.jsx',
-            './src/components/games/TriviaShowdown.jsx',
-            './src/components/games/HeadsUp.jsx',
-            './src/components/games/WouldYouRather.jsx',
-            './src/components/games/DailyRiddles.jsx',
-          ]
         }
       }
     }
