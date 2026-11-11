@@ -5574,11 +5574,11 @@ button:where(.wv-allday-evt) {
   cursor: pointer;
 }
 
-.gcal-btn--reconnect { background: #d97706; }
+.gcal-btn--reconnect { background: var(--warn); }
 .gcal-btn--confirm,
 .auth-signout--confirm {
-  background: #ef4444;
-  border-color: #ef4444;
+  background: var(--danger);
+  border-color: var(--danger);
   color: #fff;
 }
 
@@ -5595,7 +5595,7 @@ button:where(.wv-allday-evt) {
 }
 .cal-disconnected__title { font-size: 1.15rem; font-weight: 700; color: var(--text); margin: 0; }
 .cal-disconnected__text  { font-size: 0.85rem; color: var(--text-2); margin: 0; }
-.cal-disconnected__error { font-size: 0.78rem; color: #ef4444; margin: 0; }
+.cal-disconnected__error { font-size: 0.78rem; color: var(--danger); margin: 0; }
 .cal-disconnected__actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
 .cal-stale {
@@ -5605,7 +5605,7 @@ button:where(.wv-allday-evt) {
   flex-wrap: wrap;
   padding: 8px 12px;
   margin-bottom: 8px;
-  border: 1px solid #d97706;
+  border: 1px solid var(--warn);
   border-radius: 8px;
   background: rgba(217, 119, 6, 0.12);
   color: var(--text);
@@ -5651,7 +5651,7 @@ button:where(.media-dock__item) { background: none; }
   width: auto;
   padding: 0 10px;
   border-radius: 14px;
-  background: #ef4444;
+  background: var(--danger);
   color: #fff;
   font-size: 0.72rem;
   font-weight: 700;

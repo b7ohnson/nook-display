@@ -1,10 +1,10 @@
-import { IconCheckSquare, IconShoppingCart, IconBell } from './Icons'
+import { IconCheckSquare, IconShoppingCart, IconBell, IconX } from './Icons'
 
 const TYPE_META = {
-  task:    { Icon: IconCheckSquare, color: '#4A90D9' },
-  grocery: { Icon: IconShoppingCart, color: '#22c55e' },
-  info:    { Icon: IconBell,         color: '#f59e0b' },
-  error:   { Icon: IconBell,         color: '#ef4444' },
+  task:    { Icon: IconCheckSquare, color: 'var(--accent)' },
+  grocery: { Icon: IconShoppingCart, color: 'var(--ok)' },
+  info:    { Icon: IconBell,         color: 'var(--warn)' },
+  error:   { Icon: IconBell,         color: 'var(--danger)' },
 }
 
 export default function ToastNotifications({ toasts, dismiss }) {
@@ -17,7 +17,7 @@ export default function ToastNotifications({ toasts, dismiss }) {
           <div key={t.id} className="toast" style={{ '--toast-accent': color }}>
             <span className="toast-icon" style={{ color }}><Icon size={14} /></span>
             <span className="toast-msg">{t.message}</span>
-            <button className="toast-close" onClick={() => dismiss(t.id)} aria-label="Dismiss notification">✕</button>
+            <button className="toast-close" onClick={() => dismiss(t.id)} aria-label="Dismiss notification"><IconX size={14} /></button>
           </div>
         )
       })}
