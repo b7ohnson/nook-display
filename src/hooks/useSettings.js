@@ -13,7 +13,7 @@ const DEFAULTS = {
 const TEXT_PX = { small: 14, default: 16, large: 18, xl: 20 }
 
 const FONT_FAMILIES = {
-  system: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+  system: "'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
   serif:  "Georgia, 'Times New Roman', serif",
 }
 

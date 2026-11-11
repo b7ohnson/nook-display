@@ -5,6 +5,9 @@ import { db } from '../firebase'
 export function useLeaderboard(game, timeRange = 'all') {
   const [scores, setScores] = useState([])
   const [loading, setLoading] = useState(true)
+  // null, or { code, message }. 'failed-precondition' means the composite
+  // index for the Today / This Week queries is missing (see report below).
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     if (!game) return
@@ -12,6 +15,7 @@ export function useLeaderboard(game, timeRange = 'all') {
 
     async function fetch() {
       setLoading(true)
+      setError(null)
       let cutoff
       if (timeRange === 'today') {
         cutoff = new Date()
@@ -32,7 +36,20 @@ export function useLeaderboard(game, timeRange = 'all') {
           const entries = snap.docs.map(d => ({ id: d.id, ...d.data() }))
           setScores(entries)
         }
-      } catch { if (!cancelled) setScores([]) }
+      } catch (err) {
+        if (cancelled) return
+        if (err?.code === 'failed-precondition') {
+          // Firestore's message includes a console link that creates the index.
+          console.error('[NooK] Leaderboard query needs a composite index on scores (game ASC, score DESC, timestamp ASC):', err.message)
+        }
+        setScores([])
+        setError({
+          code: err?.code || 'unknown',
+          message: err?.code === 'failed-precondition'
+            ? 'Scores for this period need a database index that has not been created yet'
+            : "Couldn't load scores",
+        })
+      }
       finally { if (!cancelled) setLoading(false) }
     }
 
@@ -47,5 +64,5 @@ export function useLeaderboard(game, timeRange = 'all') {
     })
   }
 
-  return { scores, loading, addScore }
+  return { scores, loading, error, addScore }
 }

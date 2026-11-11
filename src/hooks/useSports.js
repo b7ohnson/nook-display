@@ -40,19 +40,20 @@ const ACTIVE_LEAGUES = (() => {
   return [...LEAGUES].sort((a, b) => Number(b.featured) - Number(a.featured))
 })()
 
+const REFRESH_MS = 5 * 60 * 1000
+
 let cache = null
 let cacheTime = 0
 
+// Sunday to Saturday, matching the rest of the display.
 function weekBounds() {
-  const now = new Date()
-  const day = now.getDay()
-  const mon = new Date(now)
-  mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1))
-  mon.setHours(0, 0, 0, 0)
-  const sun = new Date(mon)
-  sun.setDate(mon.getDate() + 6)
-  sun.setHours(23, 59, 59, 999)
-  return { start: mon, end: sun }
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - start.getDay())
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return { start, end }
 }
 
 function parseGames(data) {
@@ -97,32 +98,41 @@ export function useSports() {
 
   useEffect(() => {
     const doFetch = () => {
-      if (Date.now() - cacheTime < 5 * 60 * 1000 && cache) {
+      // Small margin so the 5-minute tick is not skipped by a cache that is a
+      // few milliseconds younger than the interval.
+      if (cache && Date.now() - cacheTime < REFRESH_MS - 30_000) {
         setLeagues(cache)
         return
       }
+      // Stamped when the round starts, not when it finishes, so the next
+      // tick always sees an expired cache.
+      const startedAt = Date.now()
       let remaining = ACTIVE_LEAGUES.length
       ACTIVE_LEAGUES.forEach((league, idx) => {
         fetch(`${BASE}/${league.path}?limit=50`)
-          .then(r => r.json())
+          .then(r => {
+            if (!r.ok) throw new Error(`ESPN returned ${r.status}`)
+            return r.json()
+          })
           .then(data => {
             const games = parseGames(data)
             remaining--
             const allDone = remaining === 0
             setLeagues(prev => {
               const next = prev.map((l, i) => i === idx ? { ...l, games, loading: false } : l)
-              if (allDone) { cache = next; cacheTime = Date.now() }
+              if (allDone) { cache = next; cacheTime = startedAt }
               return next
             })
           })
           .catch(err => {
             remaining--
+            // Keep the last good games for this league on screen.
             setLeagues(prev => prev.map((l, i) => i === idx ? { ...l, loading: false, error: err.message } : l))
           })
       })
     }
     doFetch()
-    const t = setInterval(doFetch, 5 * 60 * 1000)
+    const t = setInterval(doFetch, REFRESH_MS)
     return () => clearInterval(t)
   }, [])
 

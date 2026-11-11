@@ -56,7 +56,7 @@ export default function GroceryList() {
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
         />
-        <button className="grocery-add-btn" onClick={submit}>+</button>
+        <button className="grocery-add-btn" onClick={submit} aria-label="Add grocery item">+</button>
       </div>
     </div>
   )
