@@ -14,6 +14,14 @@ const TOKEN_KEY    = 'sp_token'
 const REFRESH_KEY  = 'sp_refresh'
 const EXPIRY_KEY   = 'sp_expiry'
 
+const POLL_PLAYING_MS = 5_000
+const POLL_IDLE_MS    = 45_000
+
+// One refresh at a time, shared by the poll, the controls and the SDK. Spotify
+// rotates the refresh token, so two concurrent refreshes would race and the
+// loser's (now revoked) token could be the one left in storage.
+let refreshInFlight = null
+
 // PKCE helpers
 async function sha256(plain) {
   const data = new TextEncoder().encode(plain)
@@ -86,33 +94,52 @@ export function useSpotify() {
   }, [])
 
   // ── Poll now playing ─────────────────────────────────────────
+  // A self-scheduling loop rather than setInterval, so a slow request never
+  // overlaps the next one, and the rate drops when nothing is playing.
+  const connected = !!token
   useEffect(() => {
-    if (!token) { setNow(null); return }
-    fetchNowPlaying(token)
-    pollRef.current = setInterval(() => fetchNowPlaying(tokenRef.current), 5000)
-    return () => clearInterval(pollRef.current)
-  }, [token])
+    if (!connected) { setNow(null); return }
+    let stopped = false
+    const loop = async () => {
+      await fetchNowPlaying()
+      if (stopped) return
+      const playing = nowPlayingRef.current?.isPlaying
+      pollRef.current = setTimeout(loop, playing ? POLL_PLAYING_MS : POLL_IDLE_MS)
+    }
+    loop()
+    return () => { stopped = true; clearTimeout(pollRef.current) }
+  }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchNowPlaying(tok) {
-    if (!tok) return
-    // Refresh token if within 60 s of expiry
+  // Fetch with the current token, refreshing first if it is about to expire
+  // and once more on a 401. Returns the Response, or null if there is no
+  // usable token.
+  async function authedFetch(url, opts = {}) {
     const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0')
     if (Date.now() > expiry - 60_000) {
-      const refreshed = await doRefresh()
-      if (!refreshed) return
-      tok = tokenRef.current
+      if (!(await doRefresh())) return null
     }
+    const send = () => {
+      const tok = tokenRef.current
+      if (!tok) return null
+      return fetch(url, { ...opts, headers: { Authorization: `Bearer ${tok}`, ...opts.headers } })
+    }
+    let res = await send()
+    if (res?.status === 401 && (await doRefresh())) res = await send()
+    return res
+  }
+
+  async function fetchNowPlaying() {
+    if (!tokenRef.current) return
     try {
-      const res = await fetch('https://api.spotify.com/v1/me/player?additional_types=track', {
-        headers: { Authorization: `Bearer ${tok}` },
-      })
+      const res = await authedFetch('https://api.spotify.com/v1/me/player?additional_types=track')
+      if (!res) return
       if (res.status === 204) { setNow(null); return }
-      if (res.status === 401) { disconnect(); return }
       if (!res.ok) return
       const data = await res.json()
       const item = data.item
       if (!item) { setNow(null); return }
       setNow({
+        uri:        item.uri,
         track:      item.name,
         artist:     item.artists?.map(a => a.name).join(', ') || '',
         album:      item.album?.name || '',
@@ -126,12 +153,21 @@ export function useSpotify() {
         shuffleOn:  data.shuffle_state ?? false,
       })
       setError(null)
-    } catch (e) {
+    } catch {
       // Network errors are silent — keep last known state
     }
   }
 
-  async function doRefresh() {
+  function doRefresh() {
+    if (!refreshInFlight) {
+      refreshInFlight = runRefresh().finally(() => { refreshInFlight = null })
+    }
+    return refreshInFlight
+  }
+
+  // Only a definitive rejection of the refresh token (invalid_grant) ends the
+  // connection. Rate limits, 5xx and network failures keep it for next time.
+  async function runRefresh() {
     const refresh = localStorage.getItem(REFRESH_KEY)
     if (!refresh) { disconnect(); return false }
     try {
@@ -144,9 +180,15 @@ export function useSpotify() {
           client_id:     CLIENT_ID,
         }),
       })
-      const data = await res.json()
-      if (!data.access_token) { disconnect(); return false }
+      const data = await res.json().catch(() => ({}))
+      if (res.status === 400 && data.error === 'invalid_grant') {
+        disconnect()
+        setError('Spotify sign-in expired — connect again')
+        return false
+      }
+      if (!res.ok || !data.access_token) return false
       saveTokens(data)
+      tokenRef.current = data.access_token
       setToken(data.access_token)
       return true
     } catch {
@@ -209,6 +251,7 @@ export function useSpotify() {
         const track = state.track_window?.current_track
         if (!track) return
         setNow({
+          uri:        track.uri,
           track:      track.name,
           artist:     track.artists?.map(a => a.name).join(', ') || '',
           album:      track.album?.name || '',
@@ -307,12 +350,8 @@ export function useSpotify() {
       return
     }
     // Fallback: REST API for external devices
-    const tok = tokenRef.current
-    if (!tok) return
-    await fetch(`https://api.spotify.com/v1/me/player/${restEndpoint}`, {
-      method: restMethod,
-      headers: { Authorization: `Bearer ${tok}` },
-    })
+    if (!tokenRef.current) return
+    await authedFetch(`https://api.spotify.com/v1/me/player/${restEndpoint}`, { method: restMethod }).catch(() => null)
     setTimeout(() => fetchNowPlaying(tokenRef.current), 300)
   }
 
@@ -324,21 +363,23 @@ export function useSpotify() {
   const setVolume = (pct) => control('volume', `volume?volume_percent=${pct}`, 'PUT')
 
   // ── Generic API fetch helper ─────────────────────────────────
-  async function apiFetch(path, method = 'GET', body = undefined) {
-    const tok = tokenRef.current
-    if (!tok) return null
+  // Returns parsed JSON, or null for an empty or failed response. With
+  // `strict`, failures throw instead so callers can tell "none" from "failed".
+  async function apiFetch(path, method = 'GET', body = undefined, { strict = false } = {}) {
+    if (!tokenRef.current) {
+      if (strict) throw new Error('Spotify is not connected')
+      return null
+    }
     try {
-      const res = await fetch(`https://api.spotify.com/v1${path}`, {
+      const res = await authedFetch(`https://api.spotify.com/v1${path}`, {
         method,
-        headers: {
-          Authorization: `Bearer ${tok}`,
-          ...(body ? { 'Content-Type': 'application/json' } : {}),
-        },
+        headers: body ? { 'Content-Type': 'application/json' } : {},
         ...(body ? { body: JSON.stringify(body) } : {}),
       })
+      if (!res) throw new Error('Spotify session expired')
       if (res.status === 204) return null
-      if (res.status === 401) { disconnect(); return null }
       if (!res.ok) {
+        if (strict) throw new Error(`Spotify returned ${res.status}`)
         const errText = await res.text()
         console.error(`[Spotify API] ${method} ${path} → ${res.status}:`, errText)
         return null
@@ -346,6 +387,7 @@ export function useSpotify() {
       const text = await res.text()
       return text ? JSON.parse(text) : null
     } catch (e) {
+      if (strict) throw e
       console.error(`[Spotify API] ${method} ${path} fetch error:`, e)
       return null
     }
@@ -354,7 +396,7 @@ export function useSpotify() {
   // ── Search tracks ────────────────────────────────────────────
   async function search(query) {
     if (!query.trim()) return []
-    const data = await apiFetch(`/search?q=${encodeURIComponent(query)}&type=track&limit=30`)
+    const data = await apiFetch(`/search?q=${encodeURIComponent(query)}&type=track&limit=30`, 'GET', undefined, { strict: true })
     return (data?.tracks?.items || []).map(t => ({
       id: t.id,
       uri: t.uri,
@@ -368,8 +410,7 @@ export function useSpotify() {
 
   // ── User's playlists ─────────────────────────────────────────
   async function fetchPlaylists() {
-    const data = await apiFetch('/me/playlists?limit=50')
-    console.log('[NooK] playlists raw count:', data?.items?.length)
+    const data = await apiFetch('/me/playlists?limit=50', 'GET', undefined, { strict: true })
     return (data?.items || []).map(p => ({
       id: p.id,
       uri: p.uri,
@@ -382,12 +423,10 @@ export function useSpotify() {
 
   // ── Tracks in a playlist ─────────────────────────────────────
   async function fetchPlaylistTracks(playlistId) {
-    const data = await apiFetch(`/playlists/${playlistId}/tracks?limit=50`)
-    console.log('[NooK] playlist tracks raw:', data ? `items=${data.items?.length}` : 'null/error')
+    const data = await apiFetch(`/playlists/${playlistId}/tracks?limit=50`, 'GET', undefined, { strict: true })
     if (!data?.items) return []
 
     const items = data.items.filter(i => i?.track?.id)
-    console.log('[NooK] items with track.id:', items.length)
 
     return items.map(i => ({
       id: i.track.id,

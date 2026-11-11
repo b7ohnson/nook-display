@@ -37,6 +37,17 @@ function resolveFeeds() {
 
 const FEEDS = resolveFeeds()
 
+// Feed content is third-party: only http(s) links are ever shown or encoded.
+function safeUrl(u) {
+  return typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : null
+}
+
+function plainText(html) {
+  const doc = new DOMParser().parseFromString(String(html), 'text/html')
+  const text = (doc.body.textContent || '').replace(/\s+/g, ' ').trim()
+  return text.length > 400 ? text.slice(0, 397).trimEnd() + '…' : text
+}
+
 function readCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null') } catch { return null }
 }
@@ -64,12 +75,16 @@ export function useNews() {
           if (!res.ok) throw new Error(`Feed service returned ${res.status}`)
           const data = await res.json()
           if (data.status !== 'ok') throw new Error(data.message || 'Feed error')
-          const items = (data.items || []).slice(0, 8).map(i => ({
-            title:     i.title,
-            link:      i.link,
-            date:      i.pubDate ? new Date(i.pubDate).toISOString() : null,
-            thumbnail: i.thumbnail || i.enclosure?.url || null,
-          })).filter(i => i.title)
+          const items = (data.items || []).slice(0, 8).map(i => {
+            const when = i.pubDate ? new Date(i.pubDate.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(i.pubDate) ? '' : 'Z')) : null
+            return {
+              title:     i.title,
+              link:      safeUrl(i.link),
+              summary:   plainText(i.description || i.content || ''),
+              date:      when && !isNaN(when) ? when.toISOString() : null,
+              thumbnail: safeUrl(i.thumbnail || i.enclosure?.link || i.enclosure?.url),
+            }
+          }).filter(i => i.title)
           if (!items.length) throw new Error('Feed returned no items')
           return { url: feed.url, items, error: null }
         } catch (err) {

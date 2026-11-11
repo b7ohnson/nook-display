@@ -49,6 +49,10 @@ export default function SpotifyPage() {
   const [query, setQuery]           = useState('')
   const [results, setResults]       = useState([])
   const [playlists, setPlaylists]   = useState([])
+  const [plState, setPlState]       = useState('loading') // loading | ready | error
+  const [searchErr, setSearchErr]   = useState(null)
+  const searchSeqRef                = useRef(0)
+  const openSeqRef                  = useRef(0)
   const [recent, setRecent]         = useState([])
   const [openPl, setOpenPl]         = useState(null)     // { id, name, art }
   const [plTracks, setPlTracks]     = useState([])
@@ -59,29 +63,49 @@ export default function SpotifyPage() {
   // Load playlists + recently played on mount
   useEffect(() => {
     if (!sp.isConnected) return
-    sp.fetchPlaylists().then(setPlaylists)
-    sp.fetchRecentlyPlayed().then(setRecent)
-  }, [sp.isConnected])
+    loadPlaylists()
+    sp.fetchRecentlyPlayed().then(setRecent).catch(() => {})
+  }, [sp.isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function loadPlaylists() {
+    setPlState('loading')
+    sp.fetchPlaylists()
+      .then(pls => { setPlaylists(pls); setPlState('ready') })
+      .catch(() => setPlState('error'))
+  }
 
   // Debounced search
   useEffect(() => {
     clearTimeout(debounceRef.current)
-    if (!query.trim()) { setResults([]); setSearching(false); return }
+    // Bumping the sequence invalidates any response still in flight, so a slow
+    // reply for "beat" cannot overwrite the results for "beatles".
+    const seq = ++searchSeqRef.current
+    if (!query.trim()) { setResults([]); setSearching(false); setSearchErr(null); return }
     setSearching(true)
     debounceRef.current = setTimeout(async () => {
-      const r = await sp.search(query)
-      setResults(r)
+      try {
+        const r = await sp.search(query)
+        if (seq !== searchSeqRef.current) return
+        setResults(r)
+        setSearchErr(null)
+      } catch {
+        if (seq !== searchSeqRef.current) return
+        setResults([])
+        setSearchErr('Search failed — check the connection and try again')
+      }
       setSearching(false)
     }, 350)
     return () => clearTimeout(debounceRef.current)
-  }, [query])
+  }, [query]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Open playlist
   async function openPlaylist(pl) {
+    const seq = ++openSeqRef.current
     setOpenPl(pl)
     setPlTracks([])
     setLoadingTracks(true)
     const tracks = await sp.fetchPlaylistTracks(pl.id).catch(() => [])
+    if (seq !== openSeqRef.current) return
     setPlTracks(tracks)
     setLoadingTracks(false)
   }
@@ -158,7 +182,8 @@ export default function SpotifyPage() {
                   ? results.map(t => <TrackRow key={t.id} track={t} onPlay={sp.playUri} onQueue={sp.addToQueue} isPlaying={nowUri === t.uri} />)
                   : recent.map(t => <TrackRow key={t.id} track={t} onPlay={sp.playUri} onQueue={sp.addToQueue} isPlaying={nowUri === t.uri} />)
                 }
-                {isSearching && !searching && results.length === 0 && (
+                {isSearching && !searching && searchErr && <p className="sp-empty">{searchErr}</p>}
+                {isSearching && !searching && !searchErr && results.length === 0 && (
                   <p className="sp-empty">No results found</p>
                 )}
                 {!isSearching && recent.length === 0 && (
@@ -178,7 +203,13 @@ export default function SpotifyPage() {
             <span className="sp-col-title">Your Playlists</span>
           </div>
           <div className="sp-pl-grid">
-            {playlists.length === 0 && <p className="sp-loading">Loading playlists…</p>}
+            {plState === 'loading' && playlists.length === 0 && <p className="sp-loading">Loading playlists…</p>}
+            {plState === 'ready' && playlists.length === 0 && <p className="sp-empty">No playlists yet</p>}
+            {plState === 'error' && (
+              <p className="sp-empty">
+                Couldn't load playlists. <button className="sp-back-btn" onClick={loadPlaylists}>Try again</button>
+              </p>
+            )}
             {playlists.map(pl => <PlaylistCard key={pl.id} pl={pl} onClick={openPlaylist} />)}
           </div>
         </div>
