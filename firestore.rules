@@ -2,6 +2,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Signing in with Google proves who someone is, not that they belong
+    // here: any Google account can authenticate against this project. Family
+    // data is therefore gated on a fixed list of account ids rather than on
+    // "is signed in". Ids, not emails, because this repo is public. To add
+    // someone: have them sign in once, copy their User UID from Firebase
+    // console > Authentication, add it here and in storage.rules, and deploy.
+    function isFamily() {
+      return request.auth != null
+          && request.auth.uid in ['ZBe6UnAYNTSP2khYZKCI4FaGi8v2'];
+    }
+
     // Game rooms are joinable by unauthenticated players via QR code, so
     // reads and some writes are public. The display app is always signed in
     // (App.jsx gates on Firebase Auth), so it gets the wider permissions and
@@ -43,38 +54,41 @@ service cloud.firestore {
                  .affectedKeys().hasOnly(['players']);
       }
 
-      allow read: if true;
+      // Players join by code, so a single room is public. Listing every open
+      // room is not something a guest needs.
+      allow get: if true;
+      allow list: if isFamily();
 
       // Only the signed-in display opens a room.
-      allow create: if request.auth != null && wellFormedNewRoom();
+      allow create: if isFamily() && wellFormedNewRoom();
 
       allow update: if
         // createRoom() uses setDoc() with no merge, so reopening a room at a
         // code that still has a stale document counts as an update, not a
         // create. Let the display reclaim it with a fresh, well-formed room.
-        (request.auth != null && wellFormedNewRoom())
+        (isFamily() && wellFormedNewRoom())
         // Normal in-game writes, while the room is still alive.
         || (roomIsLive()
             && playersFieldIsSane()
-            && (request.auth != null || onlyPlayersChanged()));
+            && (isFamily() || onlyPlayersChanged()));
 
-      allow delete: if request.auth != null;
+      allow delete: if isFamily();
     }
 
-    // Everything else is display-driven and requires Firebase Auth. These are
+    // Everything else is family data and requires a family account. These are
     // listed per collection rather than as a `/{document=**}` catch-all: that
     // recursive wildcard also matches /gameRooms/{roomCode}, and because
     // Firestore grants access if *any* matching rule allows, it silently
     // bypassed every restriction above for signed-in users.
     // Adding a new collection means adding it here — default is deny.
     match /skylight/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isFamily();
     }
     match /scores/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isFamily();
     }
     match /gameContent/{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isFamily();
     }
   }
 }
