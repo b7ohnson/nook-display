@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { IconX } from './Icons'
 
 const TEXT_SIZES = [
   { key: 'small',   label: 'S',  desc: 'Small'       },
@@ -12,11 +13,14 @@ const FONT_STYLES = [
   { key: 'serif',  label: 'Serif',  font: "Georgia, serif"        },
 ]
 
+// The keys are what syncs to Firestore (skylight/settings.accent) and are
+// kept as they were; the colours behind them are defined in App.css. 'blue'
+// is the stored default, so it now means the brand slate blue.
 const ACCENTS = [
-  { key: 'blue',  label: 'Blue',  color: '#4A90D9' },
-  { key: 'amber', label: 'Amber', color: '#F0A500' },
-  { key: 'green', label: 'Green', color: '#22c55e' },
-  { key: 'slate', label: 'Slate', color: '#4A7FA5' },
+  { key: 'blue',  label: 'Slate blue', color: '#3F7097' },
+  { key: 'amber', label: 'Amber',      color: '#F0A500' },
+  { key: 'green', label: 'Pine',       color: '#2F7350' },
+  { key: 'slate', label: 'Night navy', color: '#2B4560' },
 ]
 
 const PREVIEW_SIZES = { small: '0.72rem', default: '0.85rem', large: '0.95rem', xl: '1.05rem' }
@@ -46,15 +50,15 @@ export default function SettingsPanel({ open, onClose, settings, onUpdate }) {
         aria-label="Display settings"
       >
         <div className="settings-panel__header">
-          <span className="settings-panel__title">Display Settings</span>
-          <button className="settings-panel__close" onClick={onClose} aria-label="Close settings">✕</button>
+          <span className="settings-panel__title">Display</span>
+          <button className="settings-panel__close" onClick={onClose} aria-label="Close settings"><IconX size={22} /></button>
         </div>
 
         <div className="settings-panel__body">
 
           {/* Text Size */}
           <section className="settings-section">
-            <h3 className="settings-section__label">Text Size</h3>
+            <h3 className="settings-section__label">Text size</h3>
             <div className="settings-segment" role="group" aria-label="Text size">
               {TEXT_SIZES.map(s => (
                 <button
@@ -69,13 +73,13 @@ export default function SettingsPanel({ open, onClose, settings, onUpdate }) {
               ))}
             </div>
             <p className="settings-preview" style={{ fontSize: PREVIEW_SIZES[settings.textSize] }}>
-              The quick brown fox jumps over the lazy dog
+              Dentist, Thursday 10:30. Pick up milk on the way home.
             </p>
           </section>
 
           {/* Font Style */}
           <section className="settings-section">
-            <h3 className="settings-section__label">Font Style</h3>
+            <h3 className="settings-section__label">Typeface</h3>
             <div className="settings-font-options" role="group" aria-label="Font style">
               {FONT_STYLES.map(f => (
                 <button
@@ -93,7 +97,7 @@ export default function SettingsPanel({ open, onClose, settings, onUpdate }) {
 
           {/* Accent Color */}
           <section className="settings-section">
-            <h3 className="settings-section__label">Accent Color</h3>
+            <h3 className="settings-section__label">Accent color</h3>
             <div className="settings-accents" role="group" aria-label="Accent color">
               {ACCENTS.map(a => (
                 <button
