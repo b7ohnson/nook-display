@@ -1,26 +1,34 @@
 import { useState, useEffect, useRef } from 'react'
 
+// WMO weather codes from open-meteo. `kind` picks the SVG in Icons.jsx
+// (WeatherIcon); no emoji, so the glyphs match the rest of the display.
 const WMO = {
-  0:  { label: 'Clear',          icon: '☀️' },
-  1:  { label: 'Mostly Clear',   icon: '🌤️' },
-  2:  { label: 'Partly Cloudy',  icon: '⛅' },
-  3:  { label: 'Overcast',       icon: '☁️' },
-  45: { label: 'Foggy',          icon: '🌫️' },
-  48: { label: 'Freezing Fog',   icon: '🌫️' },
-  51: { label: 'Light Drizzle',  icon: '🌦️' },
-  53: { label: 'Drizzle',        icon: '🌦️' },
-  55: { label: 'Heavy Drizzle',  icon: '🌧️' },
-  61: { label: 'Light Rain',     icon: '🌧️' },
-  63: { label: 'Rain',           icon: '🌧️' },
-  65: { label: 'Heavy Rain',     icon: '🌧️' },
-  71: { label: 'Light Snow',     icon: '🌨️' },
-  73: { label: 'Snow',           icon: '❄️' },
-  75: { label: 'Heavy Snow',     icon: '❄️' },
-  80: { label: 'Showers',        icon: '🌦️' },
-  81: { label: 'Showers',        icon: '🌧️' },
-  82: { label: 'Heavy Showers',  icon: '🌧️' },
-  95: { label: 'Thunderstorm',   icon: '⛈️' },
-  99: { label: 'Thunderstorm',   icon: '⛈️' },
+  0:  { label: 'Clear',          kind: 'clear'   },
+  1:  { label: 'Mostly clear',   kind: 'partly'  },
+  2:  { label: 'Partly cloudy',  kind: 'partly'  },
+  3:  { label: 'Overcast',       kind: 'cloudy'  },
+  45: { label: 'Fog',            kind: 'fog'     },
+  48: { label: 'Freezing fog',   kind: 'fog'     },
+  51: { label: 'Light drizzle',  kind: 'drizzle' },
+  53: { label: 'Drizzle',        kind: 'drizzle' },
+  55: { label: 'Heavy drizzle',  kind: 'drizzle' },
+  56: { label: 'Freezing drizzle', kind: 'drizzle' },
+  61: { label: 'Light rain',     kind: 'rain'    },
+  63: { label: 'Rain',           kind: 'rain'    },
+  65: { label: 'Heavy rain',     kind: 'rain'    },
+  66: { label: 'Freezing rain',  kind: 'rain'    },
+  71: { label: 'Light snow',     kind: 'snow'    },
+  73: { label: 'Snow',           kind: 'snow'    },
+  75: { label: 'Heavy snow',     kind: 'snow'    },
+  77: { label: 'Snow grains',    kind: 'snow'    },
+  80: { label: 'Showers',        kind: 'rain'    },
+  81: { label: 'Showers',        kind: 'rain'    },
+  82: { label: 'Heavy showers',  kind: 'rain'    },
+  85: { label: 'Snow showers',   kind: 'snow'    },
+  86: { label: 'Snow showers',   kind: 'snow'    },
+  95: { label: 'Thunderstorm',   kind: 'storm'   },
+  96: { label: 'Thunderstorm',   kind: 'storm'   },
+  99: { label: 'Thunderstorm',   kind: 'storm'   },
 }
 
 const COORDS_KEY  = 'nook_weather_coords'
@@ -74,7 +82,8 @@ function buildHourly(hourly) {
       time: t,
       label: `${hour % 12 === 0 ? 12 : hour % 12}${hour < 12 ? 'a' : 'p'}`,
       temp: Math.round(hourly.temperature_2m[start + i]),
-      icon: info.icon,
+      kind: info.kind,
+      night: hourly.is_day?.[start + i] === 0,
       condition: info.label,
     }
   }).filter(h => Number.isFinite(h.temp))
@@ -84,7 +93,7 @@ function wmoInfo(code) {
   if (WMO[code]) return WMO[code]
   const keys = Object.keys(WMO).map(Number).sort((a, b) => a - b)
   const match = keys.filter(k => k <= code).at(-1)
-  return WMO[match] || { label: 'Unknown', icon: '🌡️' }
+  return WMO[match] || { label: 'Unknown', kind: 'cloudy' }
 }
 
 export function useWeather() {
@@ -144,8 +153,8 @@ export function useWeather() {
         const res = await fetch(
           `https://api.open-meteo.com/v1/forecast` +
           `?latitude=${coords.lat}&longitude=${coords.lon}` +
-          `&current=temperature_2m,apparent_temperature,weather_code` +
-          `&hourly=temperature_2m,weather_code` +
+          `&current=temperature_2m,apparent_temperature,weather_code,is_day` +
+          `&hourly=temperature_2m,weather_code,is_day` +
           `&daily=temperature_2m_max,temperature_2m_min` +
           // Two days so the strip can run past midnight without falling short.
           `&temperature_unit=fahrenheit&timezone=auto&forecast_days=2`
@@ -165,7 +174,8 @@ export function useWeather() {
           temp:      Math.round(cur.temperature_2m),
           feelsLike: Math.round(cur.apparent_temperature),
           condition: info.label,
-          icon:      info.icon,
+          kind:      info.kind,
+          night:     cur.is_day === 0,
           high:      Math.round(daily.temperature_2m_max[0]),
           low:       Math.round(daily.temperature_2m_min[0]),
           location:  [city, state].filter(Boolean).join(', '),

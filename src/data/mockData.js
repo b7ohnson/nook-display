@@ -1,6 +1,6 @@
 export const familyMembers = [
-  { id: 'blessing', name: 'Blessing', color: '#3B82F6' },
-  { id: 'pearl',    name: 'Pearl',    color: '#A855F7' },
+  { id: 'blessing', name: 'Blessing', color: '#3F7097' },
+  { id: 'pearl',    name: 'Pearl',    color: '#A35A2B' },
 ]
 
 export const events = [
@@ -35,20 +35,3 @@ export const initialChores = {
     { id: 8, task: 'Schedule dentist',   done: false },
   ],
 }
-
-export const weather = {
-  temp: 72,
-  condition: 'Sunny',
-  icon: '☀️',
-  high: 78,
-  low: 61,
-  location: 'San Francisco, CA',
-}
-
-export const photos = [
-  { id: 1, gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', caption: 'Beach Vacation 2025' },
-  { id: 2, gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', caption: 'Christmas Morning' },
-  { id: 3, gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', caption: 'Summer Picnic' },
-  { id: 4, gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', caption: 'Hiking Adventure' },
-  { id: 5, gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', caption: "Jake's Birthday Party" },
-]
