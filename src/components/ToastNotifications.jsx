@@ -4,6 +4,7 @@ const TYPE_META = {
   task:    { Icon: IconCheckSquare, color: '#4A90D9' },
   grocery: { Icon: IconShoppingCart, color: '#22c55e' },
   info:    { Icon: IconBell,         color: '#f59e0b' },
+  error:   { Icon: IconBell,         color: '#ef4444' },
 }
 
 export default function ToastNotifications({ toasts, dismiss }) {
@@ -16,7 +17,7 @@ export default function ToastNotifications({ toasts, dismiss }) {
           <div key={t.id} className="toast" style={{ '--toast-accent': color }}>
             <span className="toast-icon" style={{ color }}><Icon size={14} /></span>
             <span className="toast-msg">{t.message}</span>
-            <button className="toast-close" onClick={() => dismiss(t.id)}>✕</button>
+            <button className="toast-close" onClick={() => dismiss(t.id)} aria-label="Dismiss notification">✕</button>
           </div>
         )
       })}

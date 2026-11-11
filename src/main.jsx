@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // Nobody reloads a wall-mounted display, so a deploy has to land on its own.
 // registerSW(true) tells the waiting worker to activate and reloads once it
@@ -15,6 +16,8 @@ const updateSW = registerSW({
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary root>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

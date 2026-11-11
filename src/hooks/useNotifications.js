@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
-import { TASKS } from 'nook-core/paths'
+import { TASKS, GROCERIES } from 'nook-core/paths'
 import { db } from '../firebase'
+
+const TOAST_EVENT = 'nook-toast'
+
+// Lets hooks and handlers anywhere raise a toast without threading a callback
+// through props (the app has no context for this).
+export function notify(message, type = 'error') {
+  window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: { message, type } }))
+}
 
 export function useNotifications() {
   const [toasts, setToasts] = useState([])
@@ -18,6 +26,12 @@ export function useNotifications() {
 
   const dismiss = useCallback((id) => setToasts(prev => prev.filter(t => t.id !== id)), [])
 
+  useEffect(() => {
+    const onToast = (e) => addToast(e.detail.message, e.detail.type)
+    window.addEventListener(TOAST_EVENT, onToast)
+    return () => window.removeEventListener(TOAST_EVENT, onToast)
+  }, [addToast])
+
   // Watch tasks
   useEffect(() => {
     return onSnapshot(doc(db, ...TASKS), snap => {
@@ -31,8 +45,10 @@ export function useNotifications() {
         tasksInit.current = true
         return
       }
+      // Pending writes are this display's own edits: remember them, no toast.
+      const own = snap.metadata.hasPendingWrites
       all.filter(t => !knownTasks.current.has(t.id)).forEach(t => {
-        addToast(`New task for ${t.who}: "${t.task}"`, 'task')
+        if (!own) addToast(`New task for ${t.who}: "${t.task}"`, 'task')
         knownTasks.current.add(t.id)
       })
     })
@@ -40,15 +56,16 @@ export function useNotifications() {
 
   // Watch groceries
   useEffect(() => {
-    return onSnapshot(doc(db, 'skylight', 'groceries'), snap => {
+    return onSnapshot(doc(db, ...GROCERIES), snap => {
       const items = snap.exists() ? (snap.data().items || []) : []
       if (!grocInit.current) {
         items.forEach(i => knownGroc.current.add(i.id))
         grocInit.current = true
         return
       }
+      const own = snap.metadata.hasPendingWrites
       items.filter(i => !knownGroc.current.has(i.id)).forEach(i => {
-        addToast(`Grocery added: "${i.name}"`, 'grocery')
+        if (!own) addToast(`Grocery added: "${i.name}"`, 'grocery')
         knownGroc.current.add(i.id)
       })
     })

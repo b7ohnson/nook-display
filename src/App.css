@@ -5470,3 +5470,20 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Kiosk-hardening additions (calendar reconnect / not-connected states,
+   root error screen, confirm steps, news overlay, error toasts).
+   New rules only — nothing above this line is modified.
+   ═══════════════════════════════════════════════════════════════════════ */
+.error-boundary--root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg);
+}
+.error-boundary--root .error-boundary__msg { font-size: 1.1rem; color: var(--text); }
+.error-boundary__hint { font-size: 0.82rem; color: var(--text-2); margin: 0; }
