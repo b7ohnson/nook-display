@@ -2,6 +2,8 @@ import { useState, useRef } from 'react'
 import { familyMembers } from '../data/mockData'
 import { useTasks } from '../hooks/useTasks'
 import { IconAlertTriangle } from './Icons'
+import { nextMidnight, nextWeekStart, nextMonthStart } from 'nook-core/recurrence'
+import { useToday } from '../hooks/useToday'
 
 const RECURRENCE_OPTS = [
   { value: 'none',    label: 'Once' },
@@ -14,10 +16,9 @@ const RECUR_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }
 
 function nextReset(task) {
   if (!task.recurrence || task.recurrence === 'none' || !task.completedAt) return ''
-  const MS = { daily: 86400000, weekly: 604800000, monthly: 2592000000 }
-  const ms = MS[task.recurrence]
-  if (!ms) return ''
-  const diff = task.completedAt + ms - Date.now()
+  const boundary = { daily: nextMidnight, weekly: nextWeekStart, monthly: nextMonthStart }[task.recurrence]
+  if (!boundary) return ''
+  const diff = boundary(task.completedAt) - Date.now()
   if (diff <= 0) return 'resetting…'
   const h = Math.floor(diff / 3600000)
   const d = Math.floor(diff / 86400000)
@@ -32,6 +33,7 @@ export default function ChoreList() {
   const inputRef = useRef(null)
 
   const { tasks, synced, error, toggle, add, remove, clearArchive } = useTasks()
+  useToday() // re-render at midnight so the "resets in" labels move on
 
   const activeMember = familyMembers.find(m => m.id === activeTab)
   const list    = tasks[activeTab] || []
@@ -71,7 +73,7 @@ export default function ChoreList() {
       </div>
 
       <div className="chore-items">
-        {active.length === 0 && (
+        {active.length === 0 && synced && (
           <div className="chore-empty">All done!</div>
         )}
 
@@ -80,6 +82,7 @@ export default function ChoreList() {
             <input
               type="checkbox"
               checked={false}
+              disabled={!synced}
               onChange={() => toggle(activeTab, c.id)}
               style={{ accentColor: activeMember.color }}
             />
@@ -92,6 +95,8 @@ export default function ChoreList() {
             <button
               className="chore-remove"
               onClick={e => { e.preventDefault(); remove(activeTab, c.id) }}
+              disabled={!synced}
+              aria-label={`Remove ${c.task}`}
               title="Remove"
             >×</button>
           </label>
@@ -103,7 +108,8 @@ export default function ChoreList() {
             ref={inputRef}
             className="chore-input"
             type="text"
-            placeholder={`Add task for ${activeMember.name}…`}
+            placeholder={synced ? `Add task for ${activeMember.name}…` : 'Connecting…'}
+            disabled={!synced}
             value={newTask}
             onChange={e => setNewTask(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAdd()}
@@ -125,6 +131,8 @@ export default function ChoreList() {
             className="chore-add-btn"
             style={{ background: activeMember.color }}
             onClick={handleAdd}
+            disabled={!synced}
+            aria-label={`Add task for ${activeMember.name}`}
           >+</button>
         </div>
 
@@ -139,7 +147,7 @@ export default function ChoreList() {
               {showArchive && (
                 <span
                   className="chore-archive-clear"
-                  onClick={e => { e.stopPropagation(); clearArchive(activeTab) }}
+                  onClick={e => { e.stopPropagation(); if (synced) clearArchive(activeTab) }}
                 >
                   Clear all
                 </span>
@@ -161,6 +169,8 @@ export default function ChoreList() {
                     <button
                       className="chore-remove"
                       onClick={() => remove(activeTab, c.id)}
+                      disabled={!synced}
+                      aria-label={`Remove ${c.task} from archive`}
                       title="Remove from archive"
                     >×</button>
                   </div>

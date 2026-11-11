@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { useSpotifyContext } from '../hooks/SpotifyContext'
+import { useConfirmTap } from '../hooks/useConfirmTap'
 
 function formatMs(ms) {
   if (!ms) return '0:00'
@@ -20,6 +21,20 @@ function SpotifyLogo({ size = 16 }) {
       <circle cx="12" cy="12" r="12" fill="#1DB954"/>
       <path d="M17.9 10.9C14.7 9 9.35 8.8 6.3 9.75c-.5.15-1-.15-1.15-.6-.15-.5.15-1 .6-1.15 3.55-1.05 9.4-.85 13.1 1.35.45.25.6.85.35 1.3-.25.35-.85.5-1.3.25zm-.1 2.8c-.25.35-.75.5-1.1.25-2.7-1.65-6.8-2.15-9.95-1.15-.4.1-.85-.1-.95-.5-.1-.4.1-.85.5-.95 3.65-1.1 8.15-.55 11.25 1.35.3.15.45.65.25 1zm-1.2 2.75c-.2.3-.6.4-.9.2-2.35-1.45-5.3-1.75-8.8-.95-.35.1-.65-.15-.75-.45-.1-.35.15-.65.45-.75 3.8-.85 7.1-.5 9.7 1.1.35.15.4.55.3.85z" fill="white"/>
     </svg>
+  )
+}
+
+function DisconnectButton({ onConfirm }) {
+  const [armed, tap] = useConfirmTap(onConfirm)
+  return (
+    <button
+      className={`sp-icon-btn sp-disconnect ${armed ? 'sp-disconnect--confirm' : ''}`}
+      onClick={tap}
+      aria-label={armed ? 'Tap again to disconnect Spotify' : 'Disconnect Spotify'}
+      title="Disconnect"
+    >
+      {armed ? 'Disconnect?' : '✕'}
+    </button>
   )
 }
 
@@ -61,7 +76,7 @@ export default function SpotifyBar() {
       <div className="sp-bar sp-bar--idle">
         <SpotifyLogo size={18} />
         <span className="sp-idle-text">Nothing playing</span>
-        <button className="sp-icon-btn sp-disconnect" onClick={sp.disconnect} aria-label="Disconnect Spotify" title="Disconnect">✕</button>
+        <DisconnectButton onConfirm={sp.disconnect} />
       </div>
     )
   }
@@ -172,7 +187,7 @@ export default function SpotifyBar() {
         <IcoVol />
         <input type="range" className="sp-volume" min={0} max={100} step={1} value={volume} onChange={handleVolumeChange} aria-label="Volume" />
         {deviceName && <span className="sp-device">{deviceName}</span>}
-        <button className="sp-icon-btn sp-disconnect" onClick={sp.disconnect} aria-label="Disconnect Spotify" title="Disconnect">✕</button>
+        <DisconnectButton onConfirm={sp.disconnect} />
       </div>
     </div>
   )
