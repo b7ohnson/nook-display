@@ -5,31 +5,24 @@ import { db } from '../../firebase'
 import GamePanel from './GamePanel'
 import { FEUD_SURVEYS, FAST_MONEY_QUESTIONS } from '../../data/familyFeudSeed'
 import { useGameRoom, generateRoomCode } from '../../hooks/useGameRoom'
+import { answersMatch } from './answerMatch'
+import { IconX, IconStar } from '../Icons'
 
 const COMPANION_URL = 'https://skylight-16f44.web.app'
 const MAX_STRIKES  = 3
-const TEAM_COLORS  = ['#e11d48', '#2563eb']
+// Team colours come from the theme tokens in App.css.
+const TEAM_COLORS  = ['var(--team-1)', 'var(--team-2)']
 const MULTIPLIERS  = [1, 1, 2, 3]
 const MAIN_ROUNDS  = 4
 const FM_COUNT     = 5
 
-function normalizeAnswer(text) {
-  return String(text)
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, '')
-    .replace(/\b(a|an|the|their|your|its|my)\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function answersMatch(submitted, correct) {
-  const s = normalizeAnswer(submitted)
-  const c = normalizeAnswer(correct)
-  if (!s || !c) return false
-  if (s === c) return true
-  if (s.length >= 3 && (c.includes(s) || s.includes(c))) return true
-  const words = s.split(' ').filter(w => w.length >= 3)
-  return words.length > 0 && words.every(w => c.includes(w))
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
 }
 
 function calcFmScore(answers, questions) {
@@ -68,6 +61,24 @@ export default function FamilyFeud({ onExit }) {
   const [fmTimeLeft, setFmTimeLeft]   = useState(20)
   const [fmManualText, setFmManualText] = useState('')
 
+  // Each game plays its surveys and Fast Money questions in a fresh order.
+  const [surveys, setSurveys] = useState(() => shuffle(FEUD_SURVEYS))
+  const [fmQs, setFmQs]       = useState(() => shuffle(FAST_MONEY_QUESTIONS).slice(0, FM_COUNT))
+  const surveysRef = useRef(surveys)
+  const fmQsRef    = useRef(fmQs)
+
+  // Pending setTimeouts, cleared on exit so none can reopen buzzers or write
+  // to the room after it has been deleted.
+  const timersRef = useRef(new Set())
+  const later = (fn, ms) => {
+    const id = setTimeout(() => { timersRef.current.delete(id); fn() }, ms)
+    timersRef.current.add(id)
+  }
+  const clearTimers = () => {
+    timersRef.current.forEach(clearTimeout)
+    timersRef.current.clear()
+  }
+
   const roomDocRef  = useRef(null)
   const roomCreated = useRef(false)
   const lastBoardVerified  = useRef(null)
@@ -102,22 +113,25 @@ export default function FamilyFeud({ onExit }) {
     if (roomCreated.current) return
     roomCreated.current = true
     createRoom('feud')
-    return () => removeRoom()
+    return () => { clearTimers(); removeRoom() }
   }, []) // eslint-disable-line
 
-  const survey     = FEUD_SURVEYS[roundIdx % FEUD_SURVEYS.length]
+  const survey     = surveys[roundIdx % surveys.length]
   const multiplier = roundIdx < MULTIPLIERS.length ? MULTIPLIERS[roundIdx] : 1
 
-  const closeBuzzers = () =>
-    updateDoc(roomDocRef.current, {
+  const closeBuzzers = () => {
+    clearTimers()
+    return updateDoc(roomDocRef.current, {
       'payload.buzzersOpen':     false,
       'payload.buzzedBy':        null,
       'payload.submittedAnswer': null,
       'payload.answerResult':    null,
     })
+  }
 
   const startFaceof = (idx) => {
-    const s = FEUD_SURVEYS[idx % FEUD_SURVEYS.length]
+    const list = surveysRef.current
+    const s = list[idx % list.length]
     setFaceofState('open')
     setFaceofRank1(null)
     setFaceofTeam1(null)
@@ -141,6 +155,18 @@ export default function FamilyFeud({ onExit }) {
       'payload.questionText':    s.question,
       'payload.teamNames':       names,
     })
+  }
+
+  // A correct face-off answer goes up on the board and scores for the team
+  // that named it, so nobody has to say it again once play starts.
+  const revealFromFaceof = (rank, team) => {
+    if (rank < 0 || revealedRef.current.has(rank)) return
+    const s    = surveysRef.current[roundIdxRef.current % surveysRef.current.length]
+    const mult = roundIdxRef.current < MULTIPLIERS.length ? MULTIPLIERS[roundIdxRef.current] : 1
+    const newRev = new Set([...revealedRef.current, rank])
+    revealedRef.current = newRev
+    setRevealed(newRev)
+    setScores(sc => sc.map((v, i) => i === team ? v + s.answers[rank].pts * mult : v))
   }
 
   const moveToBoard = (winningTeam) => {
@@ -200,10 +226,33 @@ export default function FamilyFeud({ onExit }) {
       'payload.fmTimerStart': null,
       'payload.fmDuplicate':  false,
       'payload.fmSubmit':     null,
-      'payload.questionText': FAST_MONEY_QUESTIONS[0].question,
+      'payload.questionText': fmQsRef.current[0].question,
       'payload.buzzersOpen':  false,
       'payload.buzzedBy':     null,
     })
+  }
+
+  const newGame = () => {
+    clearTimers()
+    const nextSurveys = shuffle(FEUD_SURVEYS)
+    const nextFm      = shuffle(FAST_MONEY_QUESTIONS).slice(0, FM_COUNT)
+    surveysRef.current = nextSurveys
+    fmQsRef.current    = nextFm
+    setSurveys(nextSurveys)
+    setFmQs(nextFm)
+    setScores([0, 0])
+    setRoundIdx(0)
+    roundIdxRef.current = 0
+    const emptyRev = new Set()
+    revealedRef.current = emptyRev
+    setRevealed(emptyRev)
+    strikesRef.current = 0
+    setStrikes(0)
+    stealingRef.current = false
+    setStealing(false)
+    showAllRef.current = false
+    setShowAll(false)
+    startFaceof(0)
   }
 
   // ── Face-off auto-verify ──────────────────────────────────────
@@ -215,21 +264,23 @@ export default function FamilyFeud({ onExit }) {
     if (key === lastFaceofVerified.current) return
     lastFaceofVerified.current = key
 
-    const s    = FEUD_SURVEYS[roundIdxRef.current % FEUD_SURVEYS.length]
+    const s    = surveysRef.current[roundIdxRef.current % surveysRef.current.length]
     const rank = s.answers.findIndex(a => answersMatch(sub.text, a.text))
 
     if (faceofStateRef.current === 'open') {
       if (rank === 0) {
+        revealFromFaceof(0, sub.team ?? 0)
         updateDoc(roomDocRef.current, {
           'payload.answerResult':    'found',
           'payload.buzzedBy':        null,
           'payload.submittedAnswer': null,
           'payload.buzzersOpen':     false,
         })
-        setTimeout(() => moveToBoard(sub.team ?? 0), 1500)
+        later(() => moveToBoard(sub.team ?? 0), 1500)
       } else {
         const storedRank  = rank < 0 ? 999 : rank
         const counterTeam = 1 - (sub.team ?? 0)
+        revealFromFaceof(rank, sub.team ?? 0)
         setFaceofRank1(storedRank)
         setFaceofTeam1(sub.team ?? 0)
         setFaceofState('counter')
@@ -246,7 +297,7 @@ export default function FamilyFeud({ onExit }) {
           'payload.buzzersOpen':     false,
           'payload.activeTeam':      counterTeam,
         })
-        setTimeout(() => {
+        later(() => {
           updateDoc(roomDocRef.current, {
             'payload.buzzersOpen':  players.length > 0,
             'payload.answerResult': null,
@@ -258,13 +309,14 @@ export default function FamilyFeud({ onExit }) {
       const t1  = faceofTeam1Ref.current ?? 0
       const counterWins = rank >= 0 && rank < r1
       const winner      = counterWins ? (1 - t1) : t1
+      revealFromFaceof(rank, sub.team ?? (1 - t1))
       updateDoc(roomDocRef.current, {
         'payload.answerResult':    rank >= 0 ? 'found' : 'strike',
         'payload.buzzedBy':        null,
         'payload.submittedAnswer': null,
         'payload.buzzersOpen':     false,
       })
-      setTimeout(() => moveToBoard(winner), 1500)
+      later(() => moveToBoard(winner), 1500)
     }
   }, [payload.submittedAnswer]) // eslint-disable-line
 
@@ -278,7 +330,7 @@ export default function FamilyFeud({ onExit }) {
     lastBoardVerified.current = key
     if (showAllRef.current) return
 
-    const s       = FEUD_SURVEYS[roundIdxRef.current % FEUD_SURVEYS.length]
+    const s       = surveysRef.current[roundIdxRef.current % surveysRef.current.length]
     const mult    = roundIdxRef.current < MULTIPLIERS.length ? MULTIPLIERS[roundIdxRef.current] : 1
     const curRev  = revealedRef.current
     const curStr  = strikesRef.current
@@ -310,7 +362,7 @@ export default function FamilyFeud({ onExit }) {
           'payload.buzzedBy':        null,
           'payload.submittedAnswer': null,
         })
-        setTimeout(() => {
+        later(() => {
           showAllRef.current = true
           setShowAll(true)
           updateDoc(roomDocRef.current, {
@@ -330,7 +382,7 @@ export default function FamilyFeud({ onExit }) {
           'payload.submittedAnswer': null,
           'payload.strikes':         curStr,
         })
-        setTimeout(() => {
+        later(() => {
           if (allFound) {
             showAllRef.current = true
             setShowAll(true)
@@ -360,7 +412,7 @@ export default function FamilyFeud({ onExit }) {
       })
 
       if (curSteal) {
-        setTimeout(() => {
+        later(() => {
           if (pot > 0) setScores(sc => sc.map((v, i) => i === curActive ? v + pot : v))
           showAllRef.current = true
           setShowAll(true)
@@ -375,7 +427,7 @@ export default function FamilyFeud({ onExit }) {
         const stealIdx = 1 - (sub.team ?? 0)
         stealingRef.current = true
         setStealing(true)
-        setTimeout(() => {
+        later(() => {
           updateDoc(roomDocRef.current, {
             'payload.buzzersOpen':  players.length > 0,
             'payload.answerResult': null,
@@ -385,7 +437,7 @@ export default function FamilyFeud({ onExit }) {
           })
         }, 1500)
       } else {
-        setTimeout(() => {
+        later(() => {
           updateDoc(roomDocRef.current, {
             'payload.buzzersOpen':  players.length > 0,
             'payload.answerResult': null,
@@ -405,7 +457,7 @@ export default function FamilyFeud({ onExit }) {
     lastFmVerified.current = key
 
     const qIdx = sub.qIdx
-    const q    = FAST_MONEY_QUESTIONS[qIdx]
+    const q    = fmQsRef.current[qIdx]
     let best   = sub.text
     for (const a of q.answers) {
       if (answersMatch(sub.text, a.text)) { best = a.text; break }
@@ -436,7 +488,7 @@ export default function FamilyFeud({ onExit }) {
           'payload.fmCurrentQ':   nextQ,
           'payload.fmAnswers1':   next1,
           'payload.fmSubmit':     null,
-          'payload.questionText': FAST_MONEY_QUESTIONS[nextQ].question,
+          'payload.questionText': fmQsRef.current[nextQ].question,
         })
       }
     } else if (fmPhaseRef.current === 'p2') {
@@ -476,7 +528,7 @@ export default function FamilyFeud({ onExit }) {
             'payload.fmAnswers2':   next2,
             'payload.fmSubmit':     null,
             'payload.fmDuplicate':  false,
-            'payload.questionText': FAST_MONEY_QUESTIONS[nextQ].question,
+            'payload.questionText': fmQsRef.current[nextQ].question,
           })
         }
       }
@@ -540,7 +592,7 @@ export default function FamilyFeud({ onExit }) {
     <GamePanel title="Family Feud" onExit={onExit}>
       <div className="feud-setup-layout">
         <div className="feud-setup-left">
-          <p className="feud-setup-sub">Enter family names, then start playing.</p>
+          <p className="feud-setup-sub">Name the two families.</p>
           {names.map((name, i) => (
             <div key={i} className="feud-setup-team">
               <span className="feud-setup-num" style={{ background: TEAM_COLORS[i] }}>{i + 1}</span>
@@ -553,27 +605,13 @@ export default function FamilyFeud({ onExit }) {
           ))}
           <button
             className="feud-start-btn"
-            onClick={() => {
-              setScores([0, 0])
-              setRoundIdx(0)
-              roundIdxRef.current = 0
-              const emptyRev = new Set()
-              revealedRef.current = emptyRev
-              setRevealed(emptyRev)
-              strikesRef.current = 0
-              setStrikes(0)
-              stealingRef.current = false
-              setStealing(false)
-              showAllRef.current = false
-              setShowAll(false)
-              startFaceof(0)
-            }}
+            onClick={newGame}
           >
-            Start Game →
+            Start the game
           </button>
         </div>
         <div className="feud-setup-qr">
-          <div className="feud-lobby-label">Buzz in from phone</div>
+          <div className="feud-lobby-label">Buzz in from a phone</div>
           <img src={qrUrl} alt="QR" className="feud-lobby-qr" />
           <div className="feud-lobby-code">{roomCode}</div>
           {players.length > 0
@@ -584,7 +622,7 @@ export default function FamilyFeud({ onExit }) {
                   </li>
                 ))}
               </ul>
-            : <div className="feud-lobby-hint">Waiting for players…</div>
+            : <div className="feud-lobby-hint">No phones yet. The host can also run the board by hand.</div>
           }
         </div>
       </div>
@@ -593,13 +631,13 @@ export default function FamilyFeud({ onExit }) {
 
   // ── Fast Money ────────────────────────────────────────────────
   if (phase === 'fastmoney') {
-    const score1     = calcFmScore(fmAnswers1, FAST_MONEY_QUESTIONS)
-    const score2     = calcFmScore(fmAnswers2, FAST_MONEY_QUESTIONS)
+    const score1     = calcFmScore(fmAnswers1, fmQs)
+    const score2     = calcFmScore(fmAnswers2, fmQs)
     const fmTotal    = score1 + score2
     const won        = fmTotal >= 200
     const timerLimit = fmPhase === 'p1' ? 20 : 25
     const timerPct   = Math.max(0, (fmTimeLeft / timerLimit) * 100)
-    const timerClr   = fmTimeLeft > 10 ? '#22c55e' : fmTimeLeft > 5 ? '#f59e0b' : '#ef4444'
+    const timerClr   = fmTimeLeft > 10 ? 'var(--ok)' : fmTimeLeft > 5 ? 'var(--warn)' : 'var(--danger)'
 
     return (
       <div className="feud-screen feud-fm-screen">
@@ -608,21 +646,21 @@ export default function FamilyFeud({ onExit }) {
             <span className="feud-team-name">{names[0]}</span>
             <span className="feud-team-pts">{scores[0]}</span>
           </div>
-          <div className="feud-fm-banner">⭐ FAST MONEY ⭐</div>
+          <div className="feud-fm-banner">Fast Money</div>
           <div className="feud-team-score feud-team-score--right">
             <span className="feud-team-name">{names[1]}</span>
             <span className="feud-team-pts">{scores[1]}</span>
           </div>
-          <button className="feud-exit-btn" onClick={onExit}>✕</button>
+          <button className="feud-exit-btn" onClick={onExit} aria-label="Leave Family Feud"><IconX size={22} /></button>
         </div>
 
         {fmPhase === 'intro' && (
           <div className="feud-fm-intro">
             <div className="feud-fm-intro-team" style={{ color: TEAM_COLORS[fmTeam] }}>
-              {names[fmTeam]} plays Fast Money!
+              {names[fmTeam]} plays Fast Money
             </div>
             <div className="feud-fm-intro-sub">
-              Two players · 5 questions · 20 s + 25 s · Score 200+ to win the bonus!
+              Two players, five questions. The first gets 20 seconds, the second 25. Reach 200 points together to win.
             </div>
             <button
               className="feud-ctrl-btn feud-ctrl-btn--next feud-fm-start-btn"
@@ -638,12 +676,12 @@ export default function FamilyFeud({ onExit }) {
                   'payload.fmPhase':      'p1',
                   'payload.fmCurrentQ':   0,
                   'payload.fmTimerStart': ts,
-                  'payload.questionText': FAST_MONEY_QUESTIONS[0].question,
+                  'payload.questionText': fmQs[0].question,
                   'payload.fmDuplicate':  false,
                 })
               }}
             >
-              Start Player 1 — 20 seconds →
+              Start player 1 (20 seconds)
             </button>
           </div>
         )}
@@ -658,17 +696,17 @@ export default function FamilyFeud({ onExit }) {
             </div>
 
             {fmDuplicate && (
-              <div className="feud-fm-duplicate">⚠ Duplicate answer — try again!</div>
+              <div className="feud-fm-duplicate">Player 1 already said that. Try another answer.</div>
             )}
 
             <div className="feud-fm-q-num">Q{fmCurrentQ + 1} / {FM_COUNT}</div>
-            <div className="feud-fm-q-text">{FAST_MONEY_QUESTIONS[fmCurrentQ].question}</div>
+            <div className="feud-fm-q-text">{fmQs[fmCurrentQ].question}</div>
 
             {!autoMode && (
               <div className="feud-fm-manual">
                 <input
                   className="feud-fm-manual-input"
-                  placeholder="Host types answer…"
+                  placeholder="Type the answer"
                   value={fmManualText}
                   onChange={e => setFmManualText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && fmManualText.trim() && fmManualSubmit()}
@@ -694,7 +732,7 @@ export default function FamilyFeud({ onExit }) {
               {(fmPhase === 'p1' ? fmAnswers1 : fmAnswers2).map((ans, i) =>
                 i < fmCurrentQ
                   ? <div key={i} className="feud-fm-prev-row">
-                      <span className="feud-fm-prev-q">{FAST_MONEY_QUESTIONS[i].question}</span>
+                      <span className="feud-fm-prev-q">{fmQs[i].question}</span>
                       <span className="feud-fm-prev-a">{ans || '—'}</span>
                     </div>
                   : null
@@ -705,10 +743,10 @@ export default function FamilyFeud({ onExit }) {
 
         {fmPhase === 'p1_done' && (
           <div className="feud-fm-p1done">
-            <div className="feud-fm-p1done-title">Player 1 done!</div>
-            <div className="feud-fm-p1-score">P1 locked in — {score1} pts (hidden from P2)</div>
+            <div className="feud-fm-p1done-title">Player 1 is done</div>
+            <div className="feud-fm-p1-score">Player 1 scored {score1}. Their answers stay hidden while player 2 plays.</div>
             <div className="feud-fm-scoreboard">
-              {FAST_MONEY_QUESTIONS.map((q, i) => (
+              {fmQs.map((q, i) => (
                 <div key={i} className="feud-fm-row">
                   <span className="feud-fm-row-q">{q.question}</span>
                   <span className="feud-fm-row-a feud-fm-row-a--hidden">●●●●●</span>
@@ -736,11 +774,11 @@ export default function FamilyFeud({ onExit }) {
                   'payload.fmTimerStart': ts,
                   'payload.fmAnswers2':   empty,
                   'payload.fmDuplicate':  false,
-                  'payload.questionText': FAST_MONEY_QUESTIONS[0].question,
+                  'payload.questionText': fmQs[0].question,
                 })
               }}
             >
-              Start Player 2 — 25 seconds →
+              Start player 2 (25 seconds)
             </button>
           </div>
         )}
@@ -748,14 +786,16 @@ export default function FamilyFeud({ onExit }) {
         {fmPhase === 'result' && (
           <div className="feud-fm-result">
             <div className={`feud-fm-result-verdict ${won ? 'feud-fm-result-verdict--won' : 'feud-fm-result-verdict--lost'}`}>
-              {won ? `🎉 ${fmTotal} pts — YOU WIN THE BONUS!` : `${fmTotal} / 200 — So close!`}
+              {won
+                ? <><IconStar size={28} /> {fmTotal} points. You won Fast Money.</>
+                : `${fmTotal} of 200. Not this time.`}
             </div>
             <div className="feud-fm-result-grid">
               <div className="feud-fm-result-header">Question</div>
               <div className="feud-fm-result-header">Player 1</div>
               <div className="feud-fm-result-header">Player 2</div>
               <div className="feud-fm-result-header">Pts</div>
-              {FAST_MONEY_QUESTIONS.map((q, i) => {
+              {fmQs.map((q, i) => {
                 const a1  = fmAnswers1[i]
                 const a2  = fmAnswers2[i]
                 const m1  = a1 ? q.answers.find(a => answersMatch(a1, a.text)) : null
@@ -773,9 +813,9 @@ export default function FamilyFeud({ onExit }) {
                 ]
               })}
             </div>
-            <div className="feud-fm-total">Total: {fmTotal} / 200</div>
+            <div className="feud-fm-total">Total {fmTotal} of 200</div>
             <button className="feud-ctrl-btn feud-ctrl-btn--next" onClick={() => setPhase('done')}>
-              Final Score →
+              See the final score
             </button>
           </div>
         )}
@@ -794,7 +834,7 @@ export default function FamilyFeud({ onExit }) {
             {names[0]}
           </span>
           <span className="feud-team-pts">{scores[0]}</span>
-          {!isFaceof && active === 0 && <span className="feud-active-badge">● Playing</span>}
+          {!isFaceof && active === 0 && <span className="feud-active-badge">In control</span>}
         </div>
 
         <div className="feud-header-center">
@@ -803,7 +843,7 @@ export default function FamilyFeud({ onExit }) {
             : <>
                 <div className="feud-strikes">
                   {Array.from({ length: MAX_STRIKES }).map((_, i) => (
-                    <span key={i} className={`feud-x ${i < strikes ? 'feud-x--active' : ''}`}>✕</span>
+                    <span key={i} className={`feud-x ${i < strikes ? 'feud-x--active' : ''}`}><IconX size={26} /></span>
                   ))}
                 </div>
                 <div className="feud-round-badge">
@@ -819,17 +859,17 @@ export default function FamilyFeud({ onExit }) {
             {names[1]}
           </span>
           <span className="feud-team-pts">{scores[1]}</span>
-          {!isFaceof && active === 1 && <span className="feud-active-badge">● Playing</span>}
+          {!isFaceof && active === 1 && <span className="feud-active-badge">In control</span>}
         </div>
 
-        <button className="feud-exit-btn" onClick={onExit}>✕</button>
+        <button className="feud-exit-btn" onClick={onExit} aria-label="Leave Family Feud"><IconX size={22} /></button>
       </div>
 
       {isFaceof && (
         <div className="feud-faceof-status">
           {faceofState === 'open'
-            ? 'Any player — buzz in and name the #1 answer!'
-            : `${names[1 - (faceofTeam1 ?? 0)]} — counter chance! Try to beat them.`}
+            ? 'Buzz in and name the top answer.'
+            : `${names[1 - (faceofTeam1 ?? 0)]}, your turn. Beat that answer to win control.`}
         </div>
       )}
 
@@ -871,24 +911,24 @@ export default function FamilyFeud({ onExit }) {
       {(buzzersOpen || buzzedBy || answerResult) && (
         <div className="feud-buzzer-bar">
           {isFaceof && !buzzedBy && !answerResult && buzzersOpen && faceofState === 'open' && (
-            <span className="feud-buzzer-waiting">Face-off — first to buzz answers!</span>
+            <span className="feud-buzzer-waiting">First to buzz answers</span>
           )}
           {isFaceof && !buzzedBy && !answerResult && buzzersOpen && faceofState === 'counter' && (
-            <span className="feud-steal-label">Counter → {names[1 - (faceofTeam1 ?? 0)]} buzzing!</span>
+            <span className="feud-steal-label">{names[1 - (faceofTeam1 ?? 0)]} can buzz now</span>
           )}
           {!isFaceof && stealing && !buzzedBy && !answerResult && (
-            <span className="feud-steal-label">⭐ STEAL — {names[payload.stealTeam ?? 0]} buzzing!</span>
+            <span className="feud-steal-label">{names[payload.stealTeam ?? 0]} can steal with one answer</span>
           )}
           {!isFaceof && !stealing && !buzzedBy && !answerResult && buzzersOpen && (
-            <span className="feud-buzzer-waiting">Buzzers open — waiting…</span>
+            <span className="feud-buzzer-waiting">Buzzers open</span>
           )}
           {buzzedBy && !answerResult && (
-            <span className="feud-buzzed-name">⚡ {buzzedBy.name} is answering…</span>
+            <span className="feud-buzzed-name">{buzzedBy.name} is answering</span>
           )}
-          {answerResult === 'found' && <span className="feud-answer-found">✓ Answer found!</span>}
+          {answerResult === 'found' && <span className="feud-answer-found">On the board</span>}
           {answerResult === 'strike' && (
             <span className="feud-answer-strike">
-              ✗ {isFaceof ? 'Not the #1 answer!' : `Strike ${strikes}/${MAX_STRIKES}!`}
+              {isFaceof ? 'Not the top answer' : `Strike ${strikes} of ${MAX_STRIKES}`}
             </span>
           )}
           <button className="feud-buzzer-reset" onClick={closeBuzzers}>Reset</button>
@@ -897,10 +937,10 @@ export default function FamilyFeud({ onExit }) {
 
       {isFaceof && (
         <div className="feud-controls">
-          <span className="feud-faceof-manual-label">Override control:</span>
+          <span className="feud-faceof-manual-label">Give control to</span>
           {names.map((name, i) => (
             <button key={i} className="feud-ctrl-btn feud-ctrl-btn--pass" onClick={() => moveToBoard(i)}>
-              → {name}
+              {name}
             </button>
           ))}
         </div>
@@ -917,7 +957,7 @@ export default function FamilyFeud({ onExit }) {
                     strikesRef.current = next
                     setStrikes(next)
                     if (next >= MAX_STRIKES) { stealingRef.current = true; setStealing(true) }
-                  }}>✕ Strike</button>
+                  }}>Strike</button>
                   <button className="feud-ctrl-btn feud-ctrl-btn--correct" onClick={() => {
                     const pot = [...Array(survey.answers.length).keys()].reduce(
                       (s, i) => revealed.has(i) ? s + survey.answers[i].pts * multiplier : s, 0
@@ -926,7 +966,7 @@ export default function FamilyFeud({ onExit }) {
                     showAllRef.current = true
                     setShowAll(true)
                     closeBuzzers()
-                  }}>✓ Award {names[active]}</button>
+                  }}>Award to {names[active]}</button>
                 </>
               )}
               <button className="feud-ctrl-btn feud-ctrl-btn--pass" onClick={() => {
@@ -936,10 +976,10 @@ export default function FamilyFeud({ onExit }) {
                 strikesRef.current = 0
                 setStrikes(0)
                 updateDoc(roomDocRef.current, { 'payload.activeTeam': next, 'payload.strikes': 0 })
-              }}>⇄ Pass</button>
+              }}>Pass</button>
               {autoMode && (
                 <button className="feud-ctrl-btn feud-ctrl-btn--next" onClick={() => { showAllRef.current = true; setShowAll(true) }}>
-                  Reveal All
+                  Show all answers
                 </button>
               )}
             </>
@@ -948,7 +988,7 @@ export default function FamilyFeud({ onExit }) {
           {stealing && !showAll && (
             <div className="feud-steal">
               <div className="feud-steal-label">
-                STEAL! {names[payload.stealTeam ?? 1]} — one answer!
+                {names[payload.stealTeam ?? 1]} can steal with one answer
               </div>
               {!autoMode && (
                 <div className="feud-steal-btns">
@@ -962,7 +1002,7 @@ export default function FamilyFeud({ onExit }) {
                       setShowAll(true)
                       closeBuzzers()
                     }}>
-                      {name} steals!
+                      {name} stole it
                     </button>
                   ))}
                   <button className="feud-ctrl-btn feud-ctrl-btn--pass" onClick={() => {
@@ -973,7 +1013,7 @@ export default function FamilyFeud({ onExit }) {
                     showAllRef.current = true
                     setShowAll(true)
                     closeBuzzers()
-                  }}>No steal — award {names[active]}</button>
+                  }}>No steal, award to {names[active]}</button>
                 </div>
               )}
               {autoMode && (
@@ -988,10 +1028,10 @@ export default function FamilyFeud({ onExit }) {
             <div className="feud-round-end">
               {roundIdx + 1 < MAIN_ROUNDS
                 ? <button className="feud-ctrl-btn feud-ctrl-btn--next" onClick={() => goNextRound(roundIdx + 1)}>
-                    Round {roundIdx + 2} →
+                    Next: round {roundIdx + 2}
                   </button>
                 : <button className="feud-ctrl-btn feud-ctrl-btn--next" onClick={startFastMoney}>
-                    ⭐ Fast Money →
+                    On to Fast Money
                   </button>
               }
             </div>
@@ -1012,29 +1052,15 @@ export default function FamilyFeud({ onExit }) {
               {(() => {
                 const maxScore = Math.max(...scores)
                 const winners = names.filter((_, i) => scores[i] === maxScore)
-                const winnerText = winners.length > 1 ? "It's a tie!" : `${winners[0]} wins!`
+                const winnerText = winners.length > 1 ? "It's a tie" : `${winners[0]} wins`
                 return winnerText
               })()}
             </div>
-            <button className="feud-start-btn" onClick={() => {
-              setScores([0, 0])
-              setRoundIdx(0)
-              roundIdxRef.current = 0
-              const emptyRev = new Set()
-              revealedRef.current = emptyRev
-              setRevealed(emptyRev)
-              strikesRef.current = 0
-              setStrikes(0)
-              stealingRef.current = false
-              setStealing(false)
-              showAllRef.current = false
-              setShowAll(false)
-              startFaceof(0)
-            }}>
-              Play Again
+            <button className="feud-start-btn" onClick={newGame}>
+              Play again
             </button>
             <button className="feud-ctrl-btn feud-ctrl-btn--pass" onClick={onExit}>
-              Exit to Games
+              Back to games
             </button>
           </div>
         </div>

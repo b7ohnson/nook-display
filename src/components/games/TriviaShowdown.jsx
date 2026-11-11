@@ -14,7 +14,9 @@ const COMPANION_URL = 'https://skylight-16f44.web.app'
 const QUESTIONS_PER_ROUND = 15
 const TIME_LIMIT = 20
 
-const COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
+// Answer tile colours from the theme tokens in App.css; the shapes stay so
+// the four answers can be told apart without colour.
+const COLORS = ['var(--team-1)', 'var(--team-2)', 'var(--team-3)', 'var(--team-4)']
 const SHAPES = ['▲', '●', '■', '★']
 
 function shuffle(arr) {
@@ -23,8 +25,12 @@ function shuffle(arr) {
   return a
 }
 
+// answeredAt comes from the phone's clock and startedAt from the display's,
+// so a skewed phone clock could put elapsed below zero (more than the maximum
+// 2000 points) or past the limit. Clamp to the real range.
 function calcPoints(answeredAt, startedAt, limit) {
-  const elapsed = Math.min((answeredAt - startedAt) / 1000, limit)
+  const raw = (answeredAt - startedAt) / 1000
+  const elapsed = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), limit) : limit
   return Math.round(1000 + 1000 * (1 - elapsed / limit))
 }
 
@@ -35,18 +41,16 @@ export default function TriviaShowdown({ onExit }) {
   const [showLB, setShowLB]       = useState(false)
 
   const questionsRef = useRef([])
-  const playersRef   = useRef([])
   const rafRef       = useRef(null)
   const revealedRef  = useRef(false)
   const roomCreated  = useRef(false)
   const roomDocRef   = useRef(null)
 
-  const { room, players, payload, createRoom, updateState, removeRoom } = useGameRoom(roomCode)
+  const { players, payload, createRoom, mutatePlayers, removeRoom } = useGameRoom(roomCode)
   const { items: allQ, loading: qLoading } = useGameContent('trivia')
   const { addScore } = useLeaderboard('showdown')
 
   // Keep refs current for timer callbacks
-  useEffect(() => { playersRef.current = players }, [players])
   useEffect(() => { questionsRef.current = questions }, [questions])
 
   const phase = payload.phase || 'lobby'
@@ -88,15 +92,15 @@ export default function TriviaShowdown({ onExit }) {
     const q   = questionsRef.current[qIdx]
     if (!q) return
     const correct = q.answer
-    const updated = playersRef.current.map(p => {
+    // Scored against the stored players inside a transaction, so an answer
+    // that arrives while this runs is counted rather than overwritten.
+    await mutatePlayers(stored => stored.map(p => {
       if (p.answer === correct && p.answeredAt > 0) {
         const pts = calcPoints(p.answeredAt, startedAt, limit)
         return { ...p, score: (p.score || 0) + pts, lastPoints: pts }
       }
       return { ...p, lastPoints: 0 }
-    })
-    await updateDoc(roomDocRef.current, {
-      players: updated,
+    }), {
       'payload.answer': correct,
       'payload.phase': 'reveal',
     })
@@ -109,13 +113,19 @@ export default function TriviaShowdown({ onExit }) {
     doReveal(payload.questionIndex ?? 0, payload.questionStartedAt, payload.timeLimit || TIME_LIMIT)
   }
 
-  const pushQuestion = async (qs, idx, currentPlayers) => {
+  // resetScores: true on the first question of a game.
+  const pushQuestion = async (qs, idx, resetScores) => {
     const q = qs[idx]
     const startedAt = Date.now()
     revealedRef.current = false
     setTimeLeft(TIME_LIMIT)
-    await updateDoc(roomDocRef.current, {
-      players: currentPlayers,
+    await mutatePlayers(stored => stored.map(p => ({
+      ...p,
+      ...(resetScores ? { score: 0 } : {}),
+      answer: -1,
+      answeredAt: null,
+      lastPoints: 0,
+    })), {
       state: 'active',
       'payload.phase':              'question',
       'payload.questionIndex':      idx,
@@ -132,8 +142,8 @@ export default function TriviaShowdown({ onExit }) {
     const qs = shuffle(weeklyPool).slice(0, QUESTIONS_PER_ROUND)
     setQuestions(qs)
     questionsRef.current = qs
-    const freshPlayers = players.map(p => ({ ...p, score: 0, answer: -1, answeredAt: null, lastPoints: 0 }))
-    await pushQuestion(qs, 0, freshPlayers)
+    if (qs.length === 0) return
+    await pushQuestion(qs, 0, true)
   }
 
   const nextQuestion = async () => {
@@ -147,15 +157,14 @@ export default function TriviaShowdown({ onExit }) {
       if (sorted[0]) addScore({ playerName: sorted[0].name, score: sorted[0].score || 0 })
       return
     }
-    const freshPlayers = players.map(p => ({ ...p, answer: -1, answeredAt: null, lastPoints: 0 }))
-    await pushQuestion(questions, next, freshPlayers)
+    await pushQuestion(questions, next, false)
   }
 
   const answeredCount = useMemo(() => players.filter(p => p.answer != null && p.answer !== -1).length, [players])
   const playUrl = `${COMPANION_URL}/play/${roomCode}`
   const qrUrl   = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(playUrl)}`
   const timePct = (timeLeft / TIME_LIMIT) * 100
-  const timerColor = timeLeft > 10 ? '#22c55e' : timeLeft > 5 ? '#f59e0b' : '#ef4444'
+  const timerColor = timeLeft > 10 ? 'var(--ok)' : timeLeft > 5 ? 'var(--warn)' : 'var(--danger)'
 
   if (qLoading) return <GamePanel title="Trivia Showdown" onExit={onExit}><div className="game-loading">Loading…</div></GamePanel>
 
@@ -165,20 +174,20 @@ export default function TriviaShowdown({ onExit }) {
       <div className="showdown-lobby">
         <div className="showdown-lobby-left">
           <div className="showdown-room-code">{roomCode}</div>
-          <div className="showdown-room-sub">Room Code</div>
-          <img src={qrUrl} alt="QR" className="showdown-qr" />
+          <div className="showdown-room-sub">Room code</div>
+          <img src={qrUrl} alt="QR code to join this game" className="showdown-qr" />
           <div className="showdown-room-url">{playUrl}</div>
         </div>
         <div className="showdown-lobby-right">
-          <div className="showdown-players-title">Players Joined ({players.length})</div>
+          <div className="showdown-players-title">Joined ({players.length})</div>
           {players.length === 0
-            ? <div className="showdown-waiting">Waiting for players to scan and join…</div>
+            ? <div className="showdown-waiting">Scan the code with a phone to join.</div>
             : <ul className="showdown-player-list">
                 {players.map(p => <li key={p.id} className="showdown-player-item"><IconUser size={14} /> {p.name}</li>)}
               </ul>
           }
-          <button className="showdown-start-btn" onClick={startGame} disabled={players.length === 0}>
-            {players.length === 0 ? 'Waiting for players…' : `Start with ${players.length} player${players.length > 1 ? 's' : ''}`}
+          <button className="showdown-start-btn" onClick={startGame} disabled={players.length === 0 || allQ.length === 0}>
+            {players.length === 0 ? 'Waiting for players' : `Start with ${players.length} player${players.length > 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
@@ -191,18 +200,18 @@ export default function TriviaShowdown({ onExit }) {
     return (
       <GamePanel title="Trivia Showdown" onExit={onExit}>
         <div className="showdown-done">
-          <div className="showdown-done-title">Game Over!</div>
+          <div className="showdown-done-title">Final scores</div>
           <ol className="showdown-final-scores">
             {sorted.map((p, i) => (
               <li key={p.id} className="showdown-final-row">
-                <span className="showdown-final-rank" style={i < 3 ? { color: ['#f59e0b','#94a3b8','#b45309'][i], fontWeight: 700 } : {}}>{i < 3 ? `#${i+1}` : `${i+1}.`}</span>
+                <span className={`showdown-final-rank${i === 0 ? ' showdown-final-rank--first' : ''}`}>{i + 1}</span>
                 <span className="showdown-final-name">{p.name}</span>
                 <span className="showdown-final-pts">{(p.score || 0).toLocaleString()} pts</span>
               </li>
             ))}
           </ol>
           <button className="showdown-lb-toggle" onClick={() => setShowLB(v => !v)}>
-            <IconTrophy size={14} /> {showLB ? 'Hide Leaderboard' : 'All-time Leaderboard'}
+            <IconTrophy size={14} /> {showLB ? 'Hide high scores' : 'High scores'}
           </button>
           {showLB && <Leaderboard game="showdown" />}
         </div>
@@ -214,7 +223,7 @@ export default function TriviaShowdown({ onExit }) {
   const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0))
 
   return (
-    <GamePanel title="Trivia Showdown" status={`Q ${(payload.questionIndex ?? 0) + 1} / ${QUESTIONS_PER_ROUND}`} onExit={onExit}>
+    <GamePanel title="Trivia Showdown" status={`Question ${(payload.questionIndex ?? 0) + 1} of ${questions.length || QUESTIONS_PER_ROUND}`} onExit={onExit}>
       <div className="showdown-game">
         <div className="showdown-main">
 
@@ -249,7 +258,7 @@ export default function TriviaShowdown({ onExit }) {
                       <span className="showdown-opt-text">{opt}</span>
                       {phase === 'reveal' && (
                         <span className="showdown-opt-votes">
-                          {players.filter(p => p.answer === i).length} ✓
+                          {players.filter(p => p.answer === i).length} picked
                         </span>
                       )}
                     </div>
@@ -266,21 +275,21 @@ export default function TriviaShowdown({ onExit }) {
                 {answeredCount} / {players.length} answered
               </div>
               <button className="showdown-reveal-now-btn" onClick={manualReveal}>
-                Reveal Now →
+                Show the answer
               </button>
             </div>
           )}
 
           {phase === 'reveal' && (
             <button className="showdown-next-btn" onClick={nextQuestion}>
-              {(payload.questionIndex ?? 0) + 1 >= QUESTIONS_PER_ROUND ? 'View Final Results →' : 'Next Question →'}
+              {(payload.questionIndex ?? 0) + 1 >= questions.length ? 'Final scores' : 'Next question'}
             </button>
           )}
         </div>
 
         {/* Live leaderboard sidebar */}
         <div className="showdown-sidebar">
-          <div className="showdown-scores-title">Live Scores</div>
+          <div className="showdown-scores-title">Scores</div>
           <ul className="showdown-score-list">
             {sortedPlayers.slice(0, 8).map((p, i) => (
               <li key={p.id} className="showdown-score-row">

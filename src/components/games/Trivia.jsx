@@ -27,11 +27,11 @@ function sampleQuestions(items, category, n) {
 }
 
 function GradeIcon({ correct, total }) {
-  const pct = correct / total
-  if (pct >= 0.93) return <><IconTrophy size={22} /> Perfect!</>
-  if (pct >= 0.73) return <><IconTrophy size={22} /> Great!</>
-  if (pct >= 0.53) return <><IconThumbsUp size={22} /> Good!</>
-  return <><IconBookOpen size={22} /> Keep studying!</>
+  const pct = total > 0 ? correct / total : 0
+  if (correct === total && total > 0) return <><IconTrophy size={22} /> Every one right</>
+  if (pct >= 0.73) return <><IconTrophy size={22} /> A strong round</>
+  if (pct >= 0.53) return <><IconThumbsUp size={22} /> More right than wrong</>
+  return <><IconBookOpen size={22} /> A tough set. Try another category</>
 }
 
 export default function Trivia({ onExit }) {
@@ -50,12 +50,20 @@ export default function Trivia({ onExit }) {
   const [saved, setSaved]         = useState(false)
   const [showLB, setShowLB]       = useState(false)
   const timerRef = useRef(null)
+  const advanceRef = useRef(null)
+  // A category can hold fewer than QUESTIONS_PER_ROUND questions, so the
+  // round is as long as what was actually drawn.
+  const total = questions.length
+
+  useEffect(() => () => clearTimeout(advanceRef.current), [])
 
   const categories = loading ? [] : ['All', ...new Set(items.map(q => q.category).filter(Boolean))]
+  const poolSize = cat => (cat === 'All' ? items : items.filter(q => q.category === cat)).length
+  const roundSize = Math.min(QUESTIONS_PER_ROUND, poolSize(category))
 
   const stopTimer = useCallback(() => clearInterval(timerRef.current), [])
 
-  const advanceQ = useCallback((finalSelected, timeLeft, currentQ, currentScore, currentCorrect) => {
+  const advanceQ = useCallback((finalSelected, timeLeft, currentQ, currentScore, currentCorrect, roundLength) => {
     stopTimer()
     const isCorrect = finalSelected === currentQ.answer
     const newScore   = currentScore   + (isCorrect ? 100 + timeLeft * 5 : 0)
@@ -63,10 +71,11 @@ export default function Trivia({ onExit }) {
     setScore(newScore)
     setCorrect(newCorrect)
 
-    setTimeout(() => {
+    clearTimeout(advanceRef.current)
+    advanceRef.current = setTimeout(() => {
       setQIndex(prev => {
         const next = prev + 1
-        if (next >= QUESTIONS_PER_ROUND) {
+        if (next >= roundLength) {
           setPhase('results')
         } else {
           setSelected(null)
@@ -85,7 +94,7 @@ export default function Trivia({ onExit }) {
           stopTimer()
           const q = questions[qIndex]
           setSelected(-1)
-          advanceQ(-1, 0, q, score, correct)
+          advanceQ(-1, 0, q, score, correct, questions.length)
           return 0
         }
         return t - 1
@@ -96,6 +105,7 @@ export default function Trivia({ onExit }) {
 
   const startGame = () => {
     const qs = sampleQuestions(items, category, QUESTIONS_PER_ROUND)
+    if (qs.length === 0) return
     setQuestions(qs)
     setQIndex(0)
     setSelected(null)
@@ -111,7 +121,7 @@ export default function Trivia({ onExit }) {
     if (selected !== null) return
     stopTimer()
     setSelected(idx)
-    advanceQ(idx, timer, questions[qIndex], score, correct)
+    advanceQ(idx, timer, questions[qIndex], score, correct, questions.length)
   }
 
   const handleSave = async () => {
@@ -139,8 +149,12 @@ export default function Trivia({ onExit }) {
             >{cat}</button>
           ))}
         </div>
-        <div className="trivia-select-meta">{QUESTIONS_PER_ROUND} questions · 15 seconds each · updated weekly</div>
-        <button className="trivia-start-btn" onClick={startGame}>Start Quiz</button>
+        <div className="trivia-select-meta">
+          {roundSize > 0
+            ? `${roundSize} question${roundSize === 1 ? '' : 's'}, ${TIME_PER_Q} seconds each. New questions every week.`
+            : 'No questions here yet.'}
+        </div>
+        <button className="trivia-start-btn" onClick={startGame} disabled={roundSize === 0}>Start</button>
       </div>
     </GamePanel>
   )
@@ -149,9 +163,9 @@ export default function Trivia({ onExit }) {
     <GamePanel title="Trivia" onExit={onExit}>
       <div className="trivia-results">
         <div className="trivia-results-score">{score.toLocaleString()}</div>
-        <div className="trivia-results-sub">{correct} / {QUESTIONS_PER_ROUND} correct</div>
+        <div className="trivia-results-sub">{correct} of {total} right</div>
         <div className="trivia-grade">
-          <GradeIcon correct={correct} total={QUESTIONS_PER_ROUND} />
+          <GradeIcon correct={correct} total={total} />
         </div>
         {!saved ? (
           <div className="trivia-save-form">
@@ -163,14 +177,14 @@ export default function Trivia({ onExit }) {
               onKeyDown={e => e.key === 'Enter' && handleSave()}
               maxLength={20}
             />
-            <button className="trivia-save-btn" onClick={handleSave} disabled={!name.trim()}>Save Score</button>
+            <button className="trivia-save-btn" onClick={handleSave} disabled={!name.trim()}>Save score</button>
           </div>
         ) : (
-          <div className="trivia-saved"><IconCheck size={16} /> Score saved!</div>
+          <div className="trivia-saved"><IconCheck size={16} /> Score saved</div>
         )}
-        <button className="trivia-start-btn" onClick={() => setPhase('select')}>Play Again</button>
+        <button className="trivia-start-btn" onClick={() => setPhase('select')}>Play again</button>
         <button className="trivia-lb-toggle" onClick={() => setShowLB(v => !v)}>
-          <IconTrophy size={14} /> {showLB ? 'Hide Leaderboard' : 'Leaderboard'}
+          <IconTrophy size={14} /> {showLB ? 'Hide high scores' : 'High scores'}
         </button>
         {showLB && <Leaderboard game="trivia" />}
       </div>
@@ -181,15 +195,15 @@ export default function Trivia({ onExit }) {
   if (!q) return null
 
   const timerPct = (timer / TIME_PER_Q) * 100
-  const timerColor = timer > 8 ? '#22c55e' : timer > 4 ? '#f59e0b' : '#ef4444'
+  const timerColor = timer > 8 ? 'var(--ok)' : timer > 4 ? 'var(--warn)' : 'var(--danger)'
 
   return (
-    <GamePanel title="Trivia" score={score} status={`Q ${qIndex + 1} / ${QUESTIONS_PER_ROUND}`} onExit={onExit}>
+    <GamePanel title="Trivia" score={score} status={`Question ${qIndex + 1} of ${total}`} onExit={onExit}>
       <div className="trivia-game">
         <div className="trivia-progress-bar">
           <div
             className="trivia-progress-fill"
-            style={{ width: `${timerPct}%`, background: timerColor, transition: 'width 1s linear, background 0.3s' }}
+            style={{ width: `${timerPct}%`, background: timerColor, transition: 'width 1s linear, background-color 0.3s' }}
           />
         </div>
         <div className="trivia-timer" style={{ color: timerColor }}>{timer}s</div>

@@ -5,12 +5,14 @@ import { IconSmartphone, IconCheckCircle, IconSkipForward } from '../Icons'
 
 const COMPANION_URL = 'https://skylight-16f44.web.app'
 const CATEGORIES = ['Animals', 'Movies', 'Sports Stars', 'Food', 'Jobs', 'Actions']
-const RANK_COLORS = ['#f59e0b', '#94a3b8', '#b45309']
 
 export default function HeadsUp({ onExit }) {
   const [roomCode] = useState(generateRoomCode)
   const [category, setCategory] = useState('')
   const [phase, setPhase] = useState('setup')
+  // Copy of the players at the end of the round. Removing the room makes the
+  // snapshot listener report an empty list, so the results read from this.
+  const [finalPlayers, setFinalPlayers] = useState([])
 
   const { players, payload, createRoom, updatePayload, removeRoom } = useGameRoom(roomCode)
 
@@ -30,6 +32,7 @@ export default function HeadsUp({ onExit }) {
   }
 
   const endRound = async () => {
+    setFinalPlayers(players.map(p => ({ ...p })))
     await removeRoom()
     setPhase('done')
   }
@@ -39,7 +42,7 @@ export default function HeadsUp({ onExit }) {
   if (phase === 'setup') return (
     <GamePanel title="Heads Up" onExit={onExit}>
       <div className="headsup-setup">
-        <h2 className="headsup-setup-title">Choose a Category</h2>
+        <h2 className="headsup-setup-title">Pick a category</h2>
         <div className="headsup-cat-grid">
           {CATEGORIES.map(cat => (
             <button
@@ -50,7 +53,7 @@ export default function HeadsUp({ onExit }) {
           ))}
         </div>
         <button className="headsup-create-btn" onClick={openLobby} disabled={!category}>
-          Create Room →
+          Open the room
         </button>
       </div>
     </GamePanel>
@@ -68,7 +71,7 @@ export default function HeadsUp({ onExit }) {
         <div className="headsup-lobby-right">
           <div className="headsup-players-title">Players ({players.length})</div>
           {players.length === 0
-            ? <p className="headsup-waiting">Scan the QR code to join…</p>
+            ? <p className="headsup-waiting">Scan the code with a phone to join.</p>
             : <ul className="headsup-player-list">
                 {players.map(p => (
                   <li key={p.id} className="headsup-player-item">
@@ -82,7 +85,7 @@ export default function HeadsUp({ onExit }) {
             onClick={startRound}
             disabled={players.length === 0}
           >
-            {players.length === 0 ? 'Waiting for players…' : 'Start Round →'}
+            {players.length === 0 ? 'Waiting for players' : 'Start the round'}
           </button>
         </div>
       </div>
@@ -98,10 +101,10 @@ export default function HeadsUp({ onExit }) {
       <div className="headsup-active">
         <div className="headsup-active-info">
           <div className="headsup-active-icon"><IconSmartphone size={40} /></div>
-          <div className="headsup-active-text">Players are playing on their phones!</div>
+          <div className="headsup-active-text">Everyone is playing on their phones.</div>
           <div className="headsup-active-hint">
-            <IconCheckCircle size={14} /> tilt forward = correct &nbsp;·&nbsp;
-            <IconSkipForward size={14} /> tilt back = skip &nbsp;·&nbsp; 3 min timer
+            <IconCheckCircle size={14} /> tilt forward for correct &nbsp;·&nbsp;
+            <IconSkipForward size={14} /> tilt back to skip &nbsp;·&nbsp; 3 minutes each
           </div>
         </div>
         <div className="headsup-scores-grid">
@@ -124,19 +127,19 @@ export default function HeadsUp({ onExit }) {
     </GamePanel>
   )
 
-  const sorted = [...players].sort((a, b) => (b.correct || 0) - (a.correct || 0))
+  const sorted = [...finalPlayers].sort((a, b) => (b.correct || 0) - (a.correct || 0))
   return (
     <GamePanel title="Heads Up" onExit={onExit}>
       <div className="headsup-results">
-        <div className="headsup-results-title">Results — {category}</div>
+        <div className="headsup-results-title">{category}: how everyone did</div>
+        {sorted.length === 0 && <p className="headsup-waiting">Nobody finished a round.</p>}
         <ol className="headsup-results-list">
           {sorted.map((p, i) => (
             <li key={p.id} className="headsup-results-row">
               <span
-                className="headsup-results-rank"
-                style={i < 3 ? { color: RANK_COLORS[i], fontWeight: 700 } : {}}
+                className={`headsup-results-rank${i === 0 ? ' headsup-results-rank--first' : ''}`}
               >
-                {i < 3 ? `#${i + 1}` : `${i + 1}.`}
+                {i + 1}
               </span>
               <span className="headsup-results-name">{p.name}</span>
               <span className="headsup-results-score">
@@ -147,8 +150,8 @@ export default function HeadsUp({ onExit }) {
             </li>
           ))}
         </ol>
-        <button className="headsup-create-btn" onClick={() => { setPhase('setup'); setCategory('') }}>
-          Play Again
+        <button className="headsup-create-btn" onClick={() => { setPhase('setup'); setCategory(''); setFinalPlayers([]) }}>
+          Play again
         </button>
       </div>
     </GamePanel>

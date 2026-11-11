@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import GamePanel from './GamePanel'
+import { IconTrophy } from '../Icons'
 import Leaderboard from './Leaderboard'
 import { useLeaderboard } from '../../hooks/useLeaderboard'
 
@@ -167,6 +168,7 @@ export default function Tetris({ onExit }) {
         const { board: clearedBoard, cleared } = clearLines(newBoard)
         const newLines = gs.lines + cleared
         const newLevel = Math.floor(newLines / 10) + 1
+        const prevLevel = gs.level
 
         gs.score += SCORE_TABLE[cleared] * gs.level
         gs.lines  = newLines
@@ -183,7 +185,7 @@ export default function Tetris({ onExit }) {
           setStatus('gameover')
         } else {
           gs.current = newCurrent
-          if (newLevel !== gs.level - (gs.lines - newLines) / 10) {
+          if (newLevel !== prevLevel) {
             clearInterval(loopRef.current)
             loopRef.current = setInterval(() => tickRef.current(), dropMs(newLevel))
           }
@@ -325,7 +327,7 @@ export default function Tetris({ onExit }) {
           {status === 'idle' && (
             <div className="tetris-overlay">
               <div className="tetris-overlay-title">TETRIS</div>
-              <button className="tetris-start-btn" onClick={startGame}>▶ Play</button>
+              <button className="tetris-start-btn" onClick={startGame}>Play</button>
             </div>
           )}
 
@@ -337,7 +339,7 @@ export default function Tetris({ onExit }) {
                 gsRef.current.status = 'playing'
                 setStatus('playing')
                 startLoop(gsRef.current.level)
-              }}>▶ Resume</button>
+              }}>Resume</button>
             </div>
           )}
 
@@ -350,20 +352,20 @@ export default function Tetris({ onExit }) {
                 <div className="tetris-save-form">
                   <input
                     className="tetris-name-input"
-                    placeholder="Enter your name"
+                    placeholder="Your name"
                     value={name}
                     onChange={e => setName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSave()}
                     maxLength={20}
                   />
-                  <button className="tetris-save-btn" onClick={handleSave} disabled={!name.trim()}>Save Score</button>
+                  <button className="tetris-save-btn" onClick={handleSave} disabled={!name.trim()}>Save score</button>
                 </div>
               ) : (
-                <div className="tetris-saved">✓ Score saved!</div>
+                <div className="tetris-saved">Score saved</div>
               )}
-              <button className="tetris-start-btn" onClick={startGame}>Play Again</button>
+              <button className="tetris-start-btn" onClick={startGame}>Play again</button>
               <button className="tetris-lb-toggle" onClick={() => setShowLB(v => !v)}>
-                {showLB ? 'Hide Leaderboard' : '🏆 Leaderboard'}
+                {showLB ? 'Hide high scores' : <><IconTrophy size={18} /> High scores</>}
               </button>
               {showLB && <Leaderboard game="tetris" />}
             </div>
@@ -398,11 +400,11 @@ export default function Tetris({ onExit }) {
       </div>
 
       <div className="tetris-touch-controls">
-        <button className="tetris-touch-btn" onPointerDown={() => touch('left')}>◀</button>
-        <button className="tetris-touch-btn" onPointerDown={() => touch('rotate')}>↻</button>
-        <button className="tetris-touch-btn" onPointerDown={() => touch('down')}>▼</button>
-        <button className="tetris-touch-btn" onPointerDown={() => touch('right')}>▶</button>
-        <button className="tetris-touch-drop" onPointerDown={() => touch('drop')}>Drop ▼▼</button>
+        <button className="tetris-touch-btn" aria-label="Move left" onPointerDown={() => touch('left')}>◀</button>
+        <button className="tetris-touch-btn" aria-label="Rotate" onPointerDown={() => touch('rotate')}>↻</button>
+        <button className="tetris-touch-btn" aria-label="Move down" onPointerDown={() => touch('down')}>▼</button>
+        <button className="tetris-touch-btn" aria-label="Move right" onPointerDown={() => touch('right')}>▶</button>
+        <button className="tetris-touch-drop" onPointerDown={() => touch('drop')}>Drop</button>
       </div>
     </GamePanel>
   )

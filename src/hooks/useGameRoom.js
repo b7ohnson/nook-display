@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { doc, onSnapshot, setDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from 'firebase/firestore'
 import { ROOM_TTL_MS, ROOM_EXPIRY_WARNING_MS } from 'nook-core/constants'
 import { gameRoom } from 'nook-core/paths'
 import { db } from '../firebase'
@@ -7,6 +7,23 @@ import { db } from '../firebase'
 
 export function generateRoomCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase()
+}
+
+// Every change to the `players` array goes through a transaction that re-reads
+// the room first. Phones join and answer by writing the same array from the
+// companion app, so writing back a local copy would erase a join or an answer
+// that landed in between. `fn` receives the stored players and returns the new
+// array; `extra` holds other fields (state, payload.*) to write in the same
+// commit. Does nothing if the room has been deleted.
+export async function mutateRoomPlayers(roomCode, fn, extra = {}) {
+  if (!roomCode) return
+  const ref = doc(db, ...gameRoom(roomCode))
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) return
+    const current = Array.isArray(snap.data().players) ? snap.data().players : []
+    tx.update(ref, { players: fn(current), ...extra })
+  })
 }
 
 export function useGameRoom(roomCode) {
@@ -64,22 +81,16 @@ export function useGameRoom(roomCode) {
     await updateDoc(doc(db, ...gameRoom(roomCode)), dotted)
   }
 
-  const addPlayer = async (player) => {
-    if (!roomCode) return
-    await updateDoc(doc(db, ...gameRoom(roomCode)), { players: arrayUnion(player) })
-  }
+  const mutatePlayers = (fn, extra) => mutateRoomPlayers(roomCode, fn, extra)
 
-  const updatePlayerScore = async (playerId, score) => {
-    if (!roomCode || !room) return
-    const players = (room.players || []).map(p => p.id === playerId ? { ...p, score } : p)
-    await updateDoc(doc(db, ...gameRoom(roomCode)), { players })
-  }
+  const addPlayer = (player) =>
+    mutatePlayers(players => players.some(p => p.id === player.id) ? players : [...players, player])
 
-  const updatePlayer = async (playerId, updates) => {
-    if (!roomCode || !room) return
-    const players = (room.players || []).map(p => p.id === playerId ? { ...p, ...updates } : p)
-    await updateDoc(doc(db, ...gameRoom(roomCode)), { players })
-  }
+  const updatePlayerScore = (playerId, score) =>
+    mutatePlayers(players => players.map(p => p.id === playerId ? { ...p, score } : p))
+
+  const updatePlayer = (playerId, updates) =>
+    mutatePlayers(players => players.map(p => p.id === playerId ? { ...p, ...updates } : p))
 
   const removeRoom = async () => {
     if (!roomCode) return
@@ -98,6 +109,7 @@ export function useGameRoom(roomCode) {
     expiringWarning,
     createRoom,
     updateState,
+    mutatePlayers,
     updatePayload,
     addPlayer,
     updatePlayerScore,

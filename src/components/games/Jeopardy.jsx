@@ -5,33 +5,26 @@ import { db } from '../../firebase'
 import GamePanel from './GamePanel'
 import { JEOPARDY_BOARDS } from '../../data/jeopardySeed'
 import { useGameRoom, generateRoomCode } from '../../hooks/useGameRoom'
+import { answersMatch } from './answerMatch'
+import { IconX, IconStar, IconBell } from '../Icons'
 
 const COMPANION_URL = 'https://skylight-16f44.web.app'
-const BOARD_COLORS  = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b']
+// Team colours come from the theme tokens in App.css.
+const BOARD_COLORS  = ['var(--team-1)', 'var(--team-2)', 'var(--team-3)', 'var(--team-4)']
 
 // ── Answer matching ────────────────────────────────────────────
-function normalizeAnswer(text) {
-  return String(text)
-    .toLowerCase()
+// Strips the question form ("What is…", "Who was…") and subscript digits,
+// then uses the shared whole-word matcher (see answerMatch.js).
+function stripQuestionForm(text) {
+  return String(text ?? '')
     .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, d => '0123456789'['₀₁₂₃₄₅₆₇₈₉'.indexOf(d)])
-    .replace(/^(what(?:'s| is| are| was| were)?\s+(?:a\s+|an\s+|the\s+)?)/i, '')
-    .replace(/^(who(?:'s| is| are| was| were)?\s+(?:a\s+|an\s+|the\s+)?)/i, '')
-    .replace(/^(where(?:'s| is| are| was| were)?\s+)/i, '')
-    .replace(/\?$/, '')
-    .replace(/[^a-z0-9 ]/g, '')
-    .replace(/\b(a|an|the|their|your|its)\b/g, '')
-    .replace(/\s+/g, ' ')
     .trim()
+    .replace(/^(what|who|where|when)(?:'s|\s+is|\s+are|\s+was|\s+were)?\s+/i, '')
+    .replace(/\?+$/, '')
 }
 
-function answersMatch(submitted, correct) {
-  const s = normalizeAnswer(submitted)
-  const c = normalizeAnswer(correct)
-  if (!s || !c) return false
-  if (s === c) return true
-  if (s.length >= 3 && (c.includes(s) || s.includes(c))) return true
-  const words = s.split(' ').filter(w => w.length >= 3)
-  return words.length > 0 && words.every(w => c.includes(w))
+function jeopardyMatch(submitted, correct) {
+  return answersMatch(stripQuestionForm(submitted), stripQuestionForm(correct))
 }
 
 // ── Board setup ────────────────────────────────────────────────
@@ -54,10 +47,22 @@ export default function Jeopardy({ onExit }) {
 
   const roomDocRef   = useRef(null)
   const roomCreated  = useRef(false)
-  const autoCloseRef = useRef(null)
+  // Pending setTimeouts. Cleared when a clue closes, when buzzers are reset
+  // and on exit, so a late callback cannot reopen buzzers on the next clue or
+  // write to a room that has been deleted.
+  const timersRef    = useRef(new Set())
   const lastVerified = useRef(null)
 
   const { players, payload, createRoom, removeRoom } = useGameRoom(roomCode)
+
+  const later = (fn, ms) => {
+    const id = setTimeout(() => { timersRef.current.delete(id); fn() }, ms)
+    timersRef.current.add(id)
+  }
+  const clearTimers = () => {
+    timersRef.current.forEach(clearTimeout)
+    timersRef.current.clear()
+  }
 
   const board        = JEOPARDY_BOARDS[boardIdx]
   const dailyDoubles = useMemo(() => pickDailyDoubles(board), [boardIdx]) // eslint-disable-line
@@ -74,7 +79,7 @@ export default function Jeopardy({ onExit }) {
     if (roomCreated.current) return
     roomCreated.current = true
     createRoom('jeopardy')
-    return () => { clearTimeout(autoCloseRef.current); removeRoom() }
+    return () => { clearTimers(); removeRoom() }
   }, []) // eslint-disable-line
 
   // Keep payload.teamNames in sync so phones can pick teams during setup
@@ -131,7 +136,7 @@ export default function Jeopardy({ onExit }) {
   }
 
   const openBuzzers  = () => updateDoc(roomDocRef.current, { 'payload.buzzersOpen': true,  'payload.buzzedBy': null })
-  const resetBuzzers = () => updateDoc(roomDocRef.current, { 'payload.buzzersOpen': false, 'payload.buzzedBy': null, 'payload.answerResult': null })
+  const resetBuzzers = () => { clearTimers(); return updateDoc(roomDocRef.current, { 'payload.buzzersOpen': false, 'payload.buzzedBy': null, 'payload.answerResult': null }) }
 
   const award = (teamIdx, mult) => {
     const amt = active.dd && parseInt(wager) > 0 ? parseInt(wager) * mult : active.clue.value * mult
@@ -139,7 +144,7 @@ export default function Jeopardy({ onExit }) {
   }
 
   const closeClue = async () => {
-    clearTimeout(autoCloseRef.current)
+    clearTimers()
     if (!active) return
     const key = active.key
     setUsed(u => new Set([...u, key]))
@@ -164,7 +169,7 @@ export default function Jeopardy({ onExit }) {
     if (key === lastVerified.current) return
     lastVerified.current = key
 
-    const correct = answersMatch(sub.text, active.clue.a)
+    const correct = jeopardyMatch(sub.text, active.clue.a)
     if (correct) {
       const amt = (active.dd && parseInt(wager) > 0) ? parseInt(wager) : active.clue.value
       setScores(s => s.map((v, i) => i === (sub.teamIdx ?? 0) ? v + amt : v))
@@ -173,8 +178,8 @@ export default function Jeopardy({ onExit }) {
         'payload.answeredBy':   { name: sub.name, teamIdx: sub.teamIdx },
         'payload.buzzersOpen':  false,
       })
-      clearTimeout(autoCloseRef.current)
-      autoCloseRef.current = setTimeout(closeClue, 2500)
+      clearTimers()
+      later(closeClue, 2500)
     } else {
       const wrong = [...(payload.wrongAnswerers || []), sub.id]
       const stillAvailable = players.filter(p => !wrong.includes(p.id))
@@ -184,7 +189,7 @@ export default function Jeopardy({ onExit }) {
         'payload.buzzedBy':        null,
         'payload.submittedAnswer': null,
       })
-      setTimeout(() => {
+      later(() => {
         updateDoc(roomDocRef.current, {
           'payload.buzzersOpen':  stillAvailable.length > 0,
           'payload.answerResult': null,
@@ -205,7 +210,7 @@ export default function Jeopardy({ onExit }) {
       <div className="jeop-setup">
         <div className="jeop-setup-left">
           <div className="jeop-setup-section">
-            <label className="jeop-label">Select Board</label>
+            <label className="jeop-label">Board</label>
             <div className="jeop-board-opts">
               {JEOPARDY_BOARDS.map((b, i) => (
                 <button
@@ -233,16 +238,16 @@ export default function Jeopardy({ onExit }) {
               </div>
             ))}
             <div className="jeop-team-btns">
-              {teamNames.length < 4 && <button className="jeop-team-add" onClick={addTeam}>+ Add team</button>}
-              {teamNames.length > 2 && <button className="jeop-team-add" onClick={removeTeam}>− Remove team</button>}
+              {teamNames.length < 4 && <button className="jeop-team-add" onClick={addTeam}>Add a team</button>}
+              {teamNames.length > 2 && <button className="jeop-team-add" onClick={removeTeam}>Remove a team</button>}
             </div>
           </div>
 
-          <button className="jeop-start-btn" onClick={startGame}>Start Game →</button>
+          <button className="jeop-start-btn" onClick={startGame}>Start the game</button>
         </div>
 
         <div className="jeop-setup-right">
-          <div className="jeop-lobby-label">Players buzz in from phone</div>
+          <div className="jeop-lobby-label">Buzz in from a phone</div>
           <img src={qrUrl} alt="QR code" className="jeop-lobby-qr" />
           <div className="jeop-lobby-code">{roomCode}</div>
           <div className="jeop-lobby-url">{playUrl}</div>
@@ -254,7 +259,7 @@ export default function Jeopardy({ onExit }) {
                   </li>
                 ))}
               </ul>
-            : <div className="jeop-lobby-hint">Waiting for players to scan…</div>
+            : <div className="jeop-lobby-hint">No phones yet. The host can also run the board by hand.</div>
           }
         </div>
       </div>
@@ -275,19 +280,19 @@ export default function Jeopardy({ onExit }) {
             {autoMode ? (
               <>
                 {!buzzersOpen && !buzzedBy && !answerResult && (
-                  <span className="jeop-buzzer-waiting">Buzzers open…</span>
+                  <span className="jeop-buzzer-waiting">Buzzers closed</span>
                 )}
                 {buzzersOpen && !buzzedBy && (
-                  <span className="jeop-buzzer-waiting">Buzzers open — waiting…</span>
+                  <span className="jeop-buzzer-waiting">Buzzers open</span>
                 )}
                 {buzzedBy && !answerResult && (
-                  <span className="jeop-buzzed-name">⚡ {buzzedBy.name} is answering…</span>
+                  <span className="jeop-buzzed-name">{buzzedBy.name} is answering</span>
                 )}
                 {answerResult === 'correct' && (
-                  <span className="jeop-answer-correct">✓ {answeredBy?.name} got it!</span>
+                  <span className="jeop-answer-correct">{answeredBy?.name} got it</span>
                 )}
                 {answerResult === 'wrong' && (
-                  <span className="jeop-answer-wrong">✗ Wrong answer</span>
+                  <span className="jeop-answer-wrong">Not quite</span>
                 )}
                 {(buzzersOpen || buzzedBy) && (
                   <button className="jeop-buzzer-reset" onClick={resetBuzzers}>Reset</button>
@@ -296,13 +301,13 @@ export default function Jeopardy({ onExit }) {
             ) : (
               <>
                 {!buzzersOpen && !buzzedBy && (
-                  <button className="jeop-buzzer-open-btn" onClick={openBuzzers}>🔔 Open Buzzers</button>
+                  <button className="jeop-buzzer-open-btn" onClick={openBuzzers}><IconBell size={20} /> Open buzzers</button>
                 )}
                 {buzzersOpen && !buzzedBy && (
-                  <span className="jeop-buzzer-waiting">Buzzers open…</span>
+                  <span className="jeop-buzzer-waiting">Buzzers open</span>
                 )}
                 {buzzedBy && (
-                  <span className="jeop-buzzed-name">⚡ {buzzedBy.name} buzzed!</span>
+                  <span className="jeop-buzzed-name">{buzzedBy.name} buzzed first</span>
                 )}
                 {(buzzersOpen || buzzedBy) && (
                   <button className="jeop-buzzer-reset" onClick={resetBuzzers}>Reset</button>
@@ -315,12 +320,12 @@ export default function Jeopardy({ onExit }) {
 
         {active.dd && (
           <div className="jeop-dd-banner">
-            ⭐ DAILY DOUBLE
+            <IconStar size={22} /> Daily Double
             <input
               className="jeop-wager-input"
               type="number"
               min="0"
-              placeholder="Enter wager…"
+              placeholder="Wager"
               value={wager}
               onChange={e => setWager(e.target.value)}
             />
@@ -332,7 +337,7 @@ export default function Jeopardy({ onExit }) {
         {/* Auto mode: show answer after correct */}
         {autoMode && answerResult === 'correct' && (
           <div className="jeop-answer-reveal">
-            <div className="jeop-answer-label">ANSWER</div>
+            <div className="jeop-answer-label">Answer</div>
             <div className="jeop-answer-text">{active.clue.a}</div>
           </div>
         )}
@@ -340,17 +345,17 @@ export default function Jeopardy({ onExit }) {
         {/* Manual mode: reveal + award buttons */}
         {!autoMode && !showAns && (
           <button className="jeop-show-ans-btn" onClick={() => setShowAns(true)}>
-            Reveal Answer
+            Show the answer
           </button>
         )}
         {!autoMode && showAns && (
           <>
             <div className="jeop-answer-reveal">
-              <div className="jeop-answer-label">ANSWER</div>
+              <div className="jeop-answer-label">Answer</div>
               <div className="jeop-answer-text">{active.clue.a}</div>
             </div>
             <div className="jeop-award-section">
-              <div className="jeop-award-label">Award points to:</div>
+              <div className="jeop-award-label">Who answered?</div>
               <div className="jeop-award-teams">
                 {teamNames.map((name, i) => (
                   <div key={i} className="jeop-award-team">
@@ -371,7 +376,7 @@ export default function Jeopardy({ onExit }) {
         )}
 
         <button className="jeop-skip-btn jeop-skip-btn--skip" onClick={closeClue}>
-          No one got it — skip
+          Nobody got it
         </button>
       </div>
     )
@@ -401,7 +406,7 @@ export default function Jeopardy({ onExit }) {
           </div>
         )}
         <div className="jeop-remaining">{remaining} left</div>
-        <button className="jeop-exit-btn" onClick={onExit}>✕</button>
+        <button className="jeop-exit-btn" onClick={onExit} aria-label="Leave Jeopardy"><IconX size={22} /></button>
       </div>
 
       <div className="jeop-grid" style={{ gridTemplateColumns: `repeat(${board.length}, 1fr)` }}>
@@ -421,7 +426,7 @@ export default function Jeopardy({ onExit }) {
                 disabled={isUsed}
               >
                 {isUsed ? '' : `$${col.clues[ri].value}`}
-                {isDD && !isUsed && <span className="jeop-dd-star">⭐</span>}
+                {isDD && !isUsed && <span className="jeop-dd-star" aria-label="Daily Double"><IconStar size={16} /></span>}
               </button>
             )
           })
@@ -430,10 +435,16 @@ export default function Jeopardy({ onExit }) {
 
       {remaining === 0 && (
         <div className="jeop-game-over">
-          Game over! 🎉 Winner:{' '}
-          <strong style={{ color: BOARD_COLORS[scores.indexOf(Math.max(...scores))] }}>
-            {teamNames[scores.indexOf(Math.max(...scores))]}
-          </strong>
+          {(() => {
+            const top = Math.max(...scores)
+            const leaders = teamNames.map((n, i) => i).filter(i => scores[i] === top)
+            if (leaders.length > 1) {
+              return <>Board cleared. It's a tie between {leaders.map((i, k) => (
+                <span key={i}>{k > 0 && (k === leaders.length - 1 ? ' and ' : ', ')}<strong style={{ color: BOARD_COLORS[i] }}>{teamNames[i]}</strong></span>
+              ))}.</>
+            }
+            return <>Board cleared. <strong style={{ color: BOARD_COLORS[leaders[0]] }}>{teamNames[leaders[0]]}</strong> wins.</>
+          })()}
         </div>
       )}
     </div>

@@ -1,12 +1,16 @@
+import { IconChevronLeft } from '../Icons'
+
 export default function GamePanel({ title, score, status, onRestart, onExit, children }) {
   return (
     <div className="game-panel">
       <div className="game-panel-header">
-        <button className="game-panel-back" onClick={onExit}>← Games</button>
+        <button className="game-panel-back" onClick={onExit} aria-label="Back to games">
+          <IconChevronLeft size={22} /> Games
+        </button>
         <h2 className="game-panel-title">{title}</h2>
         <div className="game-panel-actions">
           {score != null && (
-            <span className="game-panel-score">Score: <strong>{score}</strong></span>
+            <span className="game-panel-score">Score <strong>{score}</strong></span>
           )}
           {status && <span className="game-panel-status">{status}</span>}
           {onRestart && (

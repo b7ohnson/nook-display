@@ -62,7 +62,7 @@ export default function WouldYouRather({ onExit }) {
     <GamePanel title="Would You Rather" onExit={onExit}>
       <div className="wyr-done">
         <div className="wyr-done-icon"><IconStar size={48} /></div>
-        <div className="wyr-done-title">You've seen them all!</div>
+        <div className="wyr-done-title">That's every question for now.</div>
         <div className="wyr-done-sub">{prompts.length} prompts completed</div>
         <button className="wyr-restart-btn" onClick={restart}>Start Over</button>
       </div>
@@ -116,7 +116,7 @@ export default function WouldYouRather({ onExit }) {
             onClick={next}
             disabled={!revealed}
           >
-            {index + 1 >= prompts.length ? 'Finish' : 'Next →'}
+            {index + 1 >= prompts.length ? 'Finish' : 'Next'}
           </button>
           {revealed && total > 0 && (
             <button className="wyr-vote-again" onClick={() => setRevealed(false)}>

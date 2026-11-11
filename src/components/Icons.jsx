@@ -347,3 +347,148 @@ export function IconMusic({ size }) {
     </Svg>
   )
 }
+
+export function IconX({ size }) {
+  return (
+    <Svg size={size}>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </Svg>
+  )
+}
+
+export function IconPlus({ size }) {
+  return (
+    <Svg size={size}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </Svg>
+  )
+}
+
+export function IconChevronLeft({ size }) {
+  return (
+    <Svg size={size}>
+      <polyline points="15 18 9 12 15 6" />
+    </Svg>
+  )
+}
+
+export function IconChevronRight({ size }) {
+  return (
+    <Svg size={size}>
+      <polyline points="9 18 15 12 9 6" />
+    </Svg>
+  )
+}
+
+// ── Weather ──────────────────────────────────────────────────────
+// Same 24px grid and 2px round stroke as the rest of the set.
+
+const CLOUD = 'M17.5 19H8a5 5 0 11.9-9.92A6 6 0 0119.5 12a3.5 3.5 0 01-2 7z'
+
+export function IconCloud({ size }) {
+  return (
+    <Svg size={size}>
+      <path d={CLOUD} />
+    </Svg>
+  )
+}
+
+export function IconPartlyCloudy({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M8 2v1.5M3.4 4.4l1 1M2 9h1.5M12.6 4.4l-1 1" />
+      <path d="M5.3 11.2A3.5 3.5 0 0111.5 7" />
+      <path d="M18 20h-8.5a4 4 0 11.7-7.94A5 5 0 0119.5 14a3 3 0 01-1.5 6z" />
+    </Svg>
+  )
+}
+
+export function IconCloudMoon({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M11.2 6.2A4.5 4.5 0 004.4 11a4.5 4.5 0 006.8-4.8z" />
+      <path d="M18 20h-8.5a4 4 0 11.7-7.94A5 5 0 0119.5 14a3 3 0 01-1.5 6z" />
+    </Svg>
+  )
+}
+
+export function IconRain({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M17.5 15H8a5 5 0 11.9-9.92A6 6 0 0119.5 8a3.5 3.5 0 01-2 7z" />
+      <line x1="8" y1="18" x2="7" y2="21" />
+      <line x1="12" y1="18" x2="11" y2="21" />
+      <line x1="16" y1="18" x2="15" y2="21" />
+    </Svg>
+  )
+}
+
+export function IconDrizzle({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M17.5 15H8a5 5 0 11.9-9.92A6 6 0 0119.5 8a3.5 3.5 0 01-2 7z" />
+      <line x1="8" y1="19" x2="8" y2="20" />
+      <line x1="12" y1="19" x2="12" y2="20" />
+      <line x1="16" y1="19" x2="16" y2="20" />
+    </Svg>
+  )
+}
+
+export function IconSnow({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M17.5 15H8a5 5 0 11.9-9.92A6 6 0 0119.5 8a3.5 3.5 0 01-2 7z" />
+      <line x1="8" y1="19" x2="8.01" y2="19" />
+      <line x1="12" y1="18" x2="12.01" y2="18" />
+      <line x1="16" y1="19" x2="16.01" y2="19" />
+      <line x1="10" y1="22" x2="10.01" y2="22" />
+      <line x1="14" y1="22" x2="14.01" y2="22" />
+    </Svg>
+  )
+}
+
+export function IconStorm({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M17.5 15H8a5 5 0 11.9-9.92A6 6 0 0119.5 8a3.5 3.5 0 01-2 7h-1" />
+      <polyline points="13 11 10 16 14 16 11 21" />
+    </Svg>
+  )
+}
+
+export function IconFog({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M17.5 13H8a5 5 0 11.9-9.92A6 6 0 0119.5 6a3.5 3.5 0 01-2 7z" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+      <line x1="6" y1="21" x2="18" y2="21" />
+    </Svg>
+  )
+}
+
+export function IconCloudOff({ size }) {
+  return (
+    <Svg size={size}>
+      <path d="M22.6 16.8A3.5 3.5 0 0019.5 12 6 6 0 009.3 8.1M5.6 8.4A5 5 0 008 19h9" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </Svg>
+  )
+}
+
+/**
+ * Weather glyph by key: 'clear', 'partly', 'cloudy', 'fog', 'drizzle',
+ * 'rain', 'snow', 'storm'. Pass night to get the moon variants of clear and
+ * partly cloudy. Unknown keys fall back to the plain cloud.
+ */
+export function WeatherIcon({ kind, night = false, size }) {
+  if (kind === 'clear')   return night ? <IconMoon size={size} /> : <IconSun size={size} />
+  if (kind === 'partly')  return night ? <IconCloudMoon size={size} /> : <IconPartlyCloudy size={size} />
+  if (kind === 'fog')     return <IconFog size={size} />
+  if (kind === 'drizzle') return <IconDrizzle size={size} />
+  if (kind === 'rain')    return <IconRain size={size} />
+  if (kind === 'snow')    return <IconSnow size={size} />
+  if (kind === 'storm')   return <IconStorm size={size} />
+  return <IconCloud size={size} />
+}
