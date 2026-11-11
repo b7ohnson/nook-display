@@ -41,18 +41,21 @@ export default defineConfig({
     }),
   ],
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          // Firebase stays manual: it is shared by the shell and several tabs,
-          // so leaving it to the splitter duplicates it across chunks.
-          //
-          // The games chunk used to be listed here too. It is now driven by the
-          // React.lazy boundary in App.jsx instead — a manual chunk would pull
-          // the games back into the initial graph and undo the split.
-          'firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
-        }
-      }
-    }
-  }
+        codeSplitting: {
+          groups: [
+            // Firebase stays in a named group: it is shared by the shell and
+            // several tabs, so leaving it to the splitter duplicates it across
+            // chunks.
+            //
+            // The games used to have a group too. They are now driven by the
+            // React.lazy boundary in App.jsx instead — a manual group would
+            // pull the games back into the initial graph and undo the split.
+            { name: 'firebase', test: /node_modules[\\/](firebase|@firebase)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
 })
