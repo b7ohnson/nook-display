@@ -5,7 +5,10 @@ service firebase.storage {
     // Same list as firestore.rules; keep the two in step.
     function isFamily() {
       return request.auth != null
-          && request.auth.uid in ['ZBe6UnAYNTSP2khYZKCI4FaGi8v2'];
+          && request.auth.uid in [
+            'ZBe6UnAYNTSP2khYZKCI4FaGi8v2',
+            '4Hcpociv2NTiCtGUEK6K1DpwVQz1',
+          ];
     }
 
     // Photos are shown through tokenised download URLs, which do not pass

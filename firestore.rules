@@ -10,7 +10,10 @@ service cloud.firestore {
     // console > Authentication, add it here and in storage.rules, and deploy.
     function isFamily() {
       return request.auth != null
-          && request.auth.uid in ['ZBe6UnAYNTSP2khYZKCI4FaGi8v2'];
+          && request.auth.uid in [
+            'ZBe6UnAYNTSP2khYZKCI4FaGi8v2',
+            '4Hcpociv2NTiCtGUEK6K1DpwVQz1',
+          ];
     }
 
     // Game rooms are joinable by unauthenticated players via QR code, so
@@ -54,6 +57,22 @@ service cloud.firestore {
                  .affectedKeys().hasOnly(['players']);
       }
 
+      // Guests on Jeopardy and Family Feud also buzz in and send answers.
+      // Those writes touch only these payload keys; everything else in the
+      // payload (board, scores, turn state) stays display-only. A guest may
+      // close the buzzers (that is what buzzing in does) but never open them.
+      function onlyGuestPayloadChanged() {
+        let before = resource.data.payload;
+        let after  = request.resource.data.payload;
+        return request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['payload'])
+            && before is map && after is map
+            && after.diff(before).affectedKeys().hasOnly(
+                 ['buzzedBy', 'buzzersOpen', 'submittedAnswer', 'fmSubmit', 'fmDuplicate'])
+            && (after.get('buzzersOpen', false) != true
+                || before.get('buzzersOpen', false) == true);
+      }
+
       // Players join by code, so a single room is public. Listing every open
       // room is not something a guest needs.
       allow get: if true;
@@ -70,7 +89,7 @@ service cloud.firestore {
         // Normal in-game writes, while the room is still alive.
         || (roomIsLive()
             && playersFieldIsSane()
-            && (isFamily() || onlyPlayersChanged()));
+            && (isFamily() || onlyPlayersChanged() || onlyGuestPayloadChanged()));
 
       allow delete: if isFamily();
     }
