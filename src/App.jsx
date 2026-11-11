@@ -12,12 +12,13 @@ import PhotoSlideshow from './components/PhotoSlideshow'
 import LoginPage from './components/LoginPage'
 import RemindersPanel from './components/RemindersPanel'
 import ToastNotifications from './components/ToastNotifications'
-import { useGoogleCalendar, parseEventId } from './hooks/useGoogleCalendar'
+import { useGoogleCalendar, parseEventId, fmtLocalDate, fmtLocalTime } from './hooks/useGoogleCalendar'
 import { useAuth } from './hooks/useAuth'
 import { useDarkMode } from './hooks/useDarkMode'
-import { useNotifications } from './hooks/useNotifications'
+import { useNotifications, notify } from './hooks/useNotifications'
+import { useConfirmTap } from './hooks/useConfirmTap'
+import { useToday } from './hooks/useToday'
 import { useSettings } from './hooks/useSettings'
-import { events as mockEvents, familyMembers } from './data/mockData'
 import SettingsPanel from './components/SettingsPanel'
 import SpotifyBar from './components/SpotifyBar'
 import { SpotifyProvider } from './hooks/SpotifyContext'
@@ -33,6 +34,10 @@ const MealPlanner = lazyWithReload(() => import('./components/MealPlanner'))
 const GamesPage   = lazyWithReload(() => import('./components/games/GamesPage'))
 
 const IDLE_MS  = 2 * 60 * 1000
+// During a game the players are on their phones and nobody touches the TV, and
+// an open dialog means someone is mid-task. The slideshow is held off for a
+// long while rather than forever so an abandoned screen still gets covered.
+const IDLE_BUSY_MS = 2 * 60 * 60 * 1000
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 // Shown while a tab's chunk loads. Reuses the existing auth spinner so a tab
@@ -45,31 +50,83 @@ function TabLoading() {
   )
 }
 
-function normalizeMock(raw) {
-  const memberMap = Object.fromEntries(familyMembers.map(m => [m.id, m]))
-  return raw.map(e => {
-    const m = e.memberId ? memberMap[e.memberId] : null
-    return { id: e.id, title: e.title, date: e.date, time: e.time || null, endTime: e.endTime || null, allDay: !!e.allDay, label: m?.name || null, color: m?.color || '#94a3b8' }
-  })
-}
-
 function AccountBadge({ label, account }) {
-  const { isSignedIn, signIn, signOut, user, loading, error } = account
-  if (loading) return <span className="gcal-hint">Syncing {label}…</span>
+  const { isSignedIn, needsReconnect, signIn, signOut, user, loading, error } = account
+  const [confirming, tapDisconnect] = useConfirmTap(signOut)
+  const disconnect = (
+    <button
+      className={`gcal-btn gcal-btn--subtle ${confirming ? 'gcal-btn--confirm' : ''}`}
+      onClick={tapDisconnect}
+      aria-label={confirming ? `Tap again to disconnect ${label}'s calendar` : `Disconnect ${label}'s calendar`}
+    >
+      {confirming ? 'Disconnect?' : '✕'}
+    </button>
+  )
+  if (loading && !isSignedIn) return <span className="gcal-hint">Syncing {label}…</span>
+  if (needsReconnect) return (
+    <div className="gcal-user">
+      <button className="gcal-btn gcal-btn--reconnect" onClick={signIn} title={error || undefined}>
+        Reconnect {label}
+      </button>
+      {disconnect}
+    </div>
+  )
   if (isSignedIn) return (
     <div className="gcal-user">
       {user?.picture
         ? <img src={user.picture} alt="" className="gcal-avatar" />
         : <div className="gcal-avatar gcal-avatar--initial">{label[0]}</div>}
       <span className="gcal-name">{user?.name || label}</span>
-      {error && <button className="gcal-btn gcal-btn--error" onClick={account.refetch} title={error}>↻</button>}
-      <button className="gcal-btn gcal-btn--subtle" onClick={signOut}>✕</button>
+      {error && (
+        <button className="gcal-btn gcal-btn--error" onClick={account.refetch} title={error} aria-label={`${error}. Retry`}>↻</button>
+      )}
+      {disconnect}
     </div>
   )
   return (
-    <button className="gcal-btn" onClick={signIn}>
+    <button className="gcal-btn" onClick={signIn} title={error || undefined}>
       Connect {label}
     </button>
+  )
+}
+
+function SignOutControls({ user, logOut }) {
+  const [confirming, tap] = useConfirmTap(logOut)
+  const label = confirming ? 'Tap again to sign out' : 'Sign out'
+  return (
+    <div className="auth-user">
+      {user.photoURL
+        ? <button className="auth-avatar-btn" onClick={tap} aria-label={label} title={label}>
+            <img src={user.photoURL} alt="" className="auth-avatar" />
+          </button>
+        : <button className="auth-avatar-btn auth-avatar auth-avatar--initial" onClick={tap} aria-label={label} title={label}>
+            {user.displayName?.[0] || '?'}
+          </button>}
+      <button className={`auth-signout ${confirming ? 'auth-signout--confirm' : ''}`} onClick={tap} title={label}>
+        {confirming ? 'Tap again to sign out' : 'Sign out'}
+      </button>
+    </div>
+  )
+}
+
+function CalendarNotConnected({ accounts }) {
+  return (
+    <div className="cal-disconnected">
+      <h2 className="cal-disconnected__title">Calendar not connected</h2>
+      {CLIENT_ID ? (
+        <>
+          <p className="cal-disconnected__text">Connect a Google account to show the family calendar here.</p>
+          <div className="cal-disconnected__actions">
+            {accounts.map(a => (
+              <button key={a.key} className="gcal-btn" onClick={a.signIn}>Connect {a.label}</button>
+            ))}
+          </div>
+          {accounts.map(a => a.error && <p key={a.key} className="cal-disconnected__error">{a.label}: {a.error}</p>)}
+        </>
+      ) : (
+        <p className="cal-disconnected__text">Google Calendar is not set up on this display.</p>
+      )}
+    </div>
   )
 }
 
@@ -112,55 +169,77 @@ function SignedInApp({ user, logOut, dark, toggleDark }) {
   const [modal, setModal]               = useState(null) // { event?, date?, time?, allDay? }
   const timerRef = useRef(null)
 
+  // At midnight the highlighted day follows the calendar to the new today.
+  const today = useToday()
+  useEffect(() => { setSelectedDate(new Date()) }, [today])
+
   const blessing = useGoogleCalendar(CLIENT_ID, 'blessing')
   const pearl    = useGoogleCalendar(CLIENT_ID, 'pearl')
 
+  const accounts = useMemo(() => [
+    { key: 'blessing', label: 'Blessing', ...blessing },
+    { key: 'pearl',    label: 'Pearl',    ...pearl    },
+  ], [blessing, pearl])
+
   const anyConnected = blessing.isSignedIn || pearl.isSignedIn
+  // Includes connections that are waiting for a Reconnect tap: their last
+  // loaded events stay on screen, flagged as possibly out of date.
+  const anyKnown = anyConnected || blessing.needsReconnect || pearl.needsReconnect
+  const stale    = accounts.filter(a => a.needsReconnect)
+
+  const accountFor = (event) => accounts.find(a => a.key === parseEventId(event.id).storageKey)
 
   const handleEventDrop = async (event, newDate, newTime) => {
-    if (!anyConnected || event.allDay) return
-    const { storageKey, calendarId, eventId } = parseEventId(event.id)
-    const account = storageKey === 'blessing' ? blessing : pearl
-    if (!account.isSignedIn) return
-    const origDuration = (
-      event.endTime
-        ? (parseInt(event.endTime) * 60 + parseInt(event.endTime.split(':')[1])) -
-          (parseInt(event.time) * 60 + parseInt(event.time?.split(':')[1] || 0))
-        : 60
-    )
-    const [nh, nm] = newTime.split(':').map(Number)
-    const newEndMins = nh * 60 + nm + (origDuration > 0 ? origDuration : 60)
-    const endTime = `${String(Math.floor(newEndMins / 60) % 24).padStart(2,'0')}:${String(newEndMins % 60).padStart(2,'0')}`
-    await account.updateEvent(calendarId, eventId, {
-      title: event.title, date: newDate, startTime: newTime, endTime, allDay: false,
-    })
+    if (event.allDay || !event.writable || event.startMs == null) return
+    const account = accountFor(event)
+    if (!account?.isSignedIn) {
+      notify('Reconnect the calendar before moving events')
+      return
+    }
+    const { calendarId, eventId } = parseEventId(event.id)
+    // Shift start and end together so the duration survives, including events
+    // that run past midnight.
+    const start = new Date(`${newDate}T${newTime}:00`)
+    const end   = new Date(start.getTime() + Math.max(event.endMs - event.startMs, 0))
+    if (start.getTime() === event.startMs) return
+    try {
+      await account.updateEvent(calendarId, eventId, {
+        date: fmtLocalDate(start), startTime: fmtLocalTime(start),
+        endDate: fmtLocalDate(end), endTime: fmtLocalTime(end),
+        allDay: false,
+      })
+    } catch (err) {
+      notify(`Could not move "${event.title}": ${err.message || 'calendar error'}`)
+    }
   }
 
-  const events = useMemo(() => {
-    if (!anyConnected) return normalizeMock(mockEvents)
-    return [...(blessing.events || []), ...(pearl.events || [])]
-  }, [anyConnected, blessing.events, pearl.events])
+  const events = useMemo(
+    () => [...(blessing.events || []), ...(pearl.events || [])],
+    [blessing.events, pearl.events]
+  )
 
   const legend = useMemo(() => {
-    if (!anyConnected) return familyMembers.map(m => ({ name: m.name, color: m.color }))
     const seen = new Set()
     return events
       .filter(e => e.label && !seen.has(e.label) && seen.add(e.label))
       .map(e => ({ name: e.label, color: e.color }))
       .slice(0, 10)
-  }, [anyConnected, events])
+  }, [events])
+
+  const busy = page === 'games' || !!modal || showSettings
+  const idleMs = busy ? IDLE_BUSY_MS : IDLE_MS
 
   useEffect(() => {
     const wake = () => {
       setIsIdle(false)
       clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => setIsIdle(true), IDLE_MS)
+      timerRef.current = setTimeout(() => setIsIdle(true), idleMs)
     }
     window.addEventListener('mousemove', wake)
     window.addEventListener('mousedown', wake)
     window.addEventListener('keydown', wake)
     window.addEventListener('touchstart', wake)
-    timerRef.current = setTimeout(() => setIsIdle(true), IDLE_MS)
+    wake()
     return () => {
       clearTimeout(timerRef.current)
       window.removeEventListener('mousemove', wake)
@@ -168,7 +247,7 @@ function SignedInApp({ user, logOut, dark, toggleDark }) {
       window.removeEventListener('keydown', wake)
       window.removeEventListener('touchstart', wake)
     }
-  }, [])
+  }, [idleMs])
 
   return (
     <SpotifyProvider>
@@ -199,22 +278,13 @@ function SignedInApp({ user, logOut, dark, toggleDark }) {
               <AccountBadge label="Pearl" account={pearl} />
             </div>
           )}
-          <button className="dark-toggle" onClick={toggleDark} title={dark ? 'Light mode' : 'Dark mode'}>
+          <button className="dark-toggle" onClick={toggleDark} aria-label={dark ? 'Light mode' : 'Dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
             {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
           </button>
           <button className="dark-toggle" onClick={() => setShowSettings(true)} aria-label="Display settings" title="Settings">
             <IconSettings size={16} />
           </button>
-          <div className="auth-user">
-            {user.photoURL
-              ? <button className="auth-avatar-btn" onClick={logOut} aria-label="Sign out" title="Sign out">
-                  <img src={user.photoURL} alt="" className="auth-avatar" />
-                </button>
-              : <button className="auth-avatar-btn auth-avatar auth-avatar--initial" onClick={logOut} aria-label="Sign out" title="Sign out">
-                  {user.displayName?.[0] || '?'}
-                </button>}
-            <button className="auth-signout" onClick={logOut} title="Sign out">Sign out</button>
-          </div>
+          <SignOutControls user={user} logOut={logOut} />
         </div>
       </header>
 
@@ -241,13 +311,31 @@ function SignedInApp({ user, logOut, dark, toggleDark }) {
               <GroceryList />
             </aside>
             <section className="right-panel">
-              <WeekView
-                events={events}
-                focusDate={selectedDate}
-                onSlotClick={(date, time, allDay) => anyConnected && setModal({ date, time, allDay })}
-                onEventClick={(event) => anyConnected && setModal({ event })}
-                onEventDrop={anyConnected ? handleEventDrop : undefined}
-              />
+              {!anyKnown ? (
+                <CalendarNotConnected accounts={accounts} />
+              ) : (
+                <>
+                  {stale.length > 0 && (
+                    <div className="cal-stale" role="status">
+                      <span>
+                        {stale.map(a => a.label).join(' and ')}: calendar needs reconnecting — events may be out of date.
+                      </span>
+                      {stale.map(a => (
+                        <button key={a.key} className="gcal-btn gcal-btn--reconnect" onClick={a.signIn}>
+                          Reconnect {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <WeekView
+                    events={events}
+                    focusDate={selectedDate}
+                    onSlotClick={(date, time, allDay) => anyConnected && setModal({ date, time, allDay })}
+                    onEventClick={(event) => accountFor(event)?.isSignedIn && setModal({ event })}
+                    onEventDrop={anyConnected ? handleEventDrop : undefined}
+                  />
+                </>
+              )}
             </section>
           </main>
           <footer className="app-footer">
@@ -276,10 +364,8 @@ function SignedInApp({ user, logOut, dark, toggleDark }) {
           event={modal.event}
           defaultDate={modal.date}
           defaultTime={modal.time}
-          accounts={[
-            { key: 'blessing', label: 'Blessing', ...blessing },
-            { key: 'pearl',    label: 'Pearl',    ...pearl    },
-          ]}
+          defaultAllDay={modal.allDay}
+          accounts={accounts}
           onClose={() => setModal(null)}
           onSaved={() => setModal(null)}
         />

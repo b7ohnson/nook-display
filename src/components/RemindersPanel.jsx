@@ -1,9 +1,7 @@
 import { useMemo } from 'react'
 import { useTasks } from '../hooks/useTasks'
-
-function dateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-}
+import { useToday } from '../hooks/useToday'
+import { addDays, eventDates } from '../hooks/useGoogleCalendar'
 
 function fmtTime(t) {
   if (!t) return 'All day'
@@ -12,18 +10,25 @@ function fmtTime(t) {
 }
 
 export default function RemindersPanel({ events = [] }) {
-  const { tasks, toggle } = useTasks()
+  const { tasks, synced, toggle } = useTasks()
 
-  const today    = dateStr(new Date())
-  const tomorrow = dateStr(new Date(Date.now() + 86400000))
+  const today    = useToday()
+  const tomorrow = addDays(today, 1)
+
+  // Multi-day events count on every day they cover; only the first day has a
+  // meaningful start time.
+  const onDay = (day) => events
+    .filter(e => eventDates(e).includes(day))
+    .map(e => (e.date === day ? e : { ...e, time: null }))
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
 
   const todayEvts = useMemo(() =>
-    events.filter(e => e.date === today).sort((a, b) => (a.time || '').localeCompare(b.time || '')),
-    [events, today])
+    onDay(today),
+    [events, today]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tomorrowEvts = useMemo(() =>
-    events.filter(e => e.date === tomorrow).sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(0, 3),
-    [events, tomorrow])
+    onDay(tomorrow).slice(0, 3),
+    [events, tomorrow]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingTasks = useMemo(() => [
     ...(tasks.blessing || []).filter(t => !t.done).map(t => ({ ...t, who: 'Blessing', memberId: 'blessing' })),
@@ -78,7 +83,8 @@ export default function RemindersPanel({ events = [] }) {
               <button
                 className="reminder-task-toggle"
                 onClick={() => toggle(t.memberId, t.id)}
-                aria-label="Mark complete"
+                disabled={!synced}
+                aria-label={`Mark "${t.task}" complete`}
               />
               <div className="reminder-body">
                 <div className="reminder-title">{t.task}</div>

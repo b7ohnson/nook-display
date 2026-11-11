@@ -5487,3 +5487,62 @@
 }
 .error-boundary--root .error-boundary__msg { font-size: 1.1rem; color: var(--text); }
 .error-boundary__hint { font-size: 0.82rem; color: var(--text-2); margin: 0; }
+
+/* Day cells and all-day events are real buttons now; strip the UA button
+   look without out-ranking the existing .cal-cell / .wv-allday-evt rules. */
+button:where(.cal-cell) {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-family: inherit;
+}
+button:where(.wv-allday-evt) {
+  display: block;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.gcal-btn--reconnect { background: #d97706; }
+.gcal-btn--confirm,
+.auth-signout--confirm {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+.cal-disconnected {
+  height: 100%;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}
+.cal-disconnected__title { font-size: 1.15rem; font-weight: 700; color: var(--text); margin: 0; }
+.cal-disconnected__text  { font-size: 0.85rem; color: var(--text-2); margin: 0; }
+.cal-disconnected__error { font-size: 0.78rem; color: #ef4444; margin: 0; }
+.cal-disconnected__actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+.cal-stale {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #d97706;
+  border-radius: 8px;
+  background: rgba(217, 119, 6, 0.12);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.cal-stale > span { flex: 1; min-width: 200px; }
+
+.modal-note { font-size: 0.78rem; color: var(--text-2); margin: 0; }

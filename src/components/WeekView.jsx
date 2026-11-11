@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useToday } from '../hooks/useToday'
+import { eventDates } from '../hooks/useGoogleCalendar'
 
-const HOUR_START  = 6
-const HOUR_END    = 23
 const PX_PER_HOUR = 68
-const GRID_HEIGHT = (HOUR_END - HOUR_START) * PX_PER_HOUR
-const HOURS       = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i)
+const DAY_MINS    = 24 * 60
+const GRID_HEIGHT = 24 * PX_PER_HOUR
+const HOURS       = Array.from({ length: 24 }, (_, i) => i)
 const DAY_NAMES   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MIN_EVT_PX  = 24
+const MIN_EVT_MINS = Math.ceil((MIN_EVT_PX / PX_PER_HOUR) * 60)
+// How long the grid is left where someone scrolled it before it drifts back
+// to the current time.
+const RESCROLL_AFTER_MS = 2 * 60 * 1000
+
+const pad = n => String(n).padStart(2, '0')
 
 function toMins(t) {
   if (!t) return 0
@@ -13,53 +21,89 @@ function toMins(t) {
   return h * 60 + m
 }
 
-function toY(t) {
-  return ((toMins(t) - HOUR_START * 60) / 60) * PX_PER_HOUR
-}
-
-function toH(start, end) {
-  const s = toMins(start || '00:00')
-  const e = toMins(end || '') || s + 60
-  return Math.max(((e - s) / 60) * PX_PER_HOUR, 24)
-}
+const minsToY = mins => (mins / 60) * PX_PER_HOUR
+const minsToTime = mins => `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`
 
 function dateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 function fmtTime(t) {
   if (!t) return ''
   const [h, m] = t.split(':').map(Number)
-  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`
+  return `${h % 12 || 12}:${pad(m)} ${h >= 12 ? 'PM' : 'AM'}`
 }
 
 function fmtHour(h) {
-  if (h === 12) return '12 PM'
-  return h > 12 ? `${h - 12} PM` : `${h} AM`
+  return `${h % 12 || 12} ${h >= 12 ? 'PM' : 'AM'}`
 }
 
-function layoutDay(events) {
-  if (!events.length) return []
-  const sorted = [...events].sort((a, b) => toMins(a.time) - toMins(b.time))
-  const cols = []
-  const out  = sorted.map(e => {
-    const s = toMins(e.time || '00:00')
-    const en = toMins(e.endTime || '') || s + 60
-    let c = cols.findIndex(end => end <= s)
+// Calendar colours come from Google and range from near-black to pale yellow,
+// so the text colour has to follow the background.
+function textOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '')
+  if (!m) return '#fff'
+  const n = parseInt(m[1], 16)
+  const lin = c => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)
+  return L > 0.4 ? '#1f2937' : '#fff'
+}
+
+// The part of a timed event that falls inside one local day, in minutes from
+// that day's midnight. Events crossing midnight yield a segment on each day.
+function segmentFor(e, day) {
+  let s, en
+  if (e.startMs != null && e.endMs != null) {
+    const dayStart = day.getTime()
+    const dayEnd   = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime()
+    if (e.endMs <= dayStart && e.startMs < dayStart) return null
+    if (e.startMs >= dayEnd) return null
+    s  = Math.max(0, Math.round((e.startMs - dayStart) / 60000))
+    en = Math.min(DAY_MINS, Math.round((e.endMs - dayStart) / 60000))
+  } else {
+    if (e.date !== dateStr(day)) return null
+    s  = toMins(e.time)
+    en = e.endTime ? toMins(e.endTime) : s + 60
+    if (en <= s) en = DAY_MINS
+  }
+  return { e, s, en, vEnd: Math.max(en, s + MIN_EVT_MINS), first: e.date === dateStr(day) }
+}
+
+// Columns are assigned per cluster of mutually overlapping events, so one
+// clash at 9am does not halve the width of an unrelated event at 4pm.
+function layoutDay(segs) {
+  const sorted = [...segs].sort((a, b) => a.s - b.s || b.en - a.en)
+  const out = []
+  let cluster = [], cols = [], clusterEnd = -1
+  const flush = () => {
+    cluster.forEach(x => { x.n = cols.length })
+    out.push(...cluster)
+    cluster = []; cols = []; clusterEnd = -1
+  }
+  for (const seg of sorted) {
+    if (cluster.length && seg.s >= clusterEnd) flush()
+    let c = cols.findIndex(end => end <= seg.s)
     if (c === -1) c = cols.length
-    cols[c] = en
-    return { ...e, _col: c, _s: s, _e: en }
-  })
-  const n = cols.length
-  return out.map(e => ({ ...e, _n: n }))
+    cols[c] = seg.vEnd
+    seg.col = c
+    cluster.push(seg)
+    clusterEnd = Math.max(clusterEnd, seg.vEnd)
+  }
+  flush()
+  return out
 }
 
 export default function WeekView({ events = [], focusDate, onSlotClick, onEventClick, onEventDrop }) {
   const [offset, setOffset] = useState(0)
   const [now, setNow]       = useState(new Date())
+  const todayStr            = useToday()
   const scrollRef           = useRef(null)
   const dragRef             = useRef(null)   // { event, grabOffsetY }
   const lastDropRef         = useRef(0)      // timestamp of last drop — suppresses click
+  const lastTouchRef        = useRef(0)      // last time someone interacted with the grid
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000)
@@ -74,27 +118,39 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
     setOffset(Math.floor((diff + today.getDay()) / 7))
   }, [focusDate])
 
-  useEffect(() => {
+  const nowMins = now.getHours() * 60 + now.getMinutes()
+
+  const scrollToDefault = () => {
     if (!scrollRef.current) return
-    const target = offset === 0
-      ? toY(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`) - 120
-      : toY('08:00') - 40
+    const target = offset === 0 ? minsToY(nowMins) - 120 : minsToY(8 * 60) - 40
     scrollRef.current.scrollTop = Math.max(0, target)
-  }, [offset])
+  }
+
+  useEffect(scrollToDefault, [offset]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Follow the clock through the day, but never yank the grid out from under
+  // someone who is looking at another part of it.
+  useEffect(() => {
+    if (offset !== 0 || dragRef.current) return
+    if (Date.now() - lastTouchRef.current < RESCROLL_AFTER_MS) return
+    scrollToDefault()
+  }, [now, todayStr]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const markTouched = () => { lastTouchRef.current = Date.now() }
 
   const weekStart = useMemo(() => {
     const d = new Date(); d.setHours(0,0,0,0)
     d.setDate(d.getDate() - d.getDay() + offset * 7)
     return d
-  }, [offset])
+    // todayStr: the week has to roll over at midnight on Saturday.
+  }, [offset, todayStr]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const days = useMemo(() =>
     Array.from({ length: 7 }, (_, i) => {
       const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d
     }), [weekStart])
 
-  const todayStr = dateStr(new Date())
-  const nowY     = toY(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)
+  const nowY = minsToY(nowMins)
 
   const weekLabel = (() => {
     const s = days[0], e = days[6]
@@ -110,9 +166,15 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
     const map = {}
     days.forEach(d => { map[dateStr(d)] = { timed: [], allDay: [] } })
     events.forEach(e => {
-      if (!map[e.date]) return
-      if (e.allDay || !e.time) map[e.date].allDay.push(e)
-      else map[e.date].timed.push(e)
+      if (e.allDay || !e.time) {
+        // Multi-day all-day events appear on every day they cover.
+        eventDates(e).forEach(ds => map[ds]?.allDay.push(e))
+        return
+      }
+      days.forEach(d => {
+        const seg = segmentFor(e, d)
+        if (seg) map[dateStr(d)].timed.push(seg)
+      })
     })
     return map
   }, [events, days])
@@ -122,6 +184,7 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
   // ── Drag handlers ──────────────────────────────
   const handleDragStart = (e, ev) => {
     ev.stopPropagation()
+    markTouched()
     dragRef.current = { event: e, grabOffsetY: ev.nativeEvent.offsetY }
     ev.dataTransfer.effectAllowed = 'move'
     ev.dataTransfer.setData('text/plain', e.id)
@@ -141,19 +204,16 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
 
     const rect = ev.currentTarget.getBoundingClientRect()
     const y    = ev.clientY - rect.top - grabOffsetY
-    const rawMins  = Math.round(((y / PX_PER_HOUR) * 60 + HOUR_START * 60) / 15) * 15
-    const clampedMins = Math.max(HOUR_START * 60, Math.min((HOUR_END - 1) * 60, rawMins))
-    const h = String(Math.floor(clampedMins / 60)).padStart(2,'0')
-    const m = String(clampedMins % 60).padStart(2,'0')
-    onEventDrop(dragEvt, ds, `${h}:${m}`)
+    const rawMins = Math.round(((y / PX_PER_HOUR) * 60) / 15) * 15
+    onEventDrop(dragEvt, ds, minsToTime(Math.max(0, Math.min(DAY_MINS - 15, rawMins))))
   }
 
   return (
     <div className="wv">
       <div className="wv-nav">
-        <button className="wv-nav-btn" onClick={() => setOffset(o => o - 1)}>‹</button>
+        <button className="wv-nav-btn" onClick={() => setOffset(o => o - 1)} aria-label="Previous week">‹</button>
         <span className="wv-week-label">{weekLabel}</span>
-        <button className="wv-nav-btn" onClick={() => setOffset(o => o + 1)}>›</button>
+        <button className="wv-nav-btn" onClick={() => setOffset(o => o + 1)} aria-label="Next week">›</button>
         {offset !== 0 && (
           <button className="wv-today-btn" onClick={() => setOffset(0)}>Today</button>
         )}
@@ -178,33 +238,40 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
           {days.map((d, i) => (
             <div key={i} className="wv-allday-col" onClick={() => onSlotClick?.(dateStr(d), null, true)}>
               {byDate[dateStr(d)]?.allDay.map(e => (
-                <div key={e.id} className="wv-allday-evt"
-                  style={{ background: e.color + 'CC', borderLeft: `3px solid ${e.color}`, color: '#fff' }}
+                <button key={e.id} type="button" className="wv-allday-evt"
+                  style={{ background: e.color + 'CC', borderLeft: `3px solid ${e.color}`, color: textOn(e.color) }}
                   onClick={ev => { ev.stopPropagation(); onEventClick?.(e) }}>
                   {e.title}
-                </div>
+                </button>
               ))}
             </div>
           ))}
         </div>
       )}
 
-      <div className="wv-scroll" ref={scrollRef}>
+      <div
+        className="wv-scroll"
+        ref={scrollRef}
+        onPointerDown={markTouched}
+        onTouchMove={markTouched}
+        onWheel={markTouched}
+        onKeyDown={markTouched}
+      >
         <div className="wv-grid" style={{ height: GRID_HEIGHT }}>
           <div className="wv-gutter wv-time-col">
             {HOURS.map(h => (
-              <div key={h} className="wv-hour-lbl" style={{ top: (h - HOUR_START) * PX_PER_HOUR }}>
-                {fmtHour(h)}
+              <div key={h} className="wv-hour-lbl" style={{ top: h * PX_PER_HOUR }}>
+                {h === 0 ? '' : fmtHour(h)}
               </div>
             ))}
           </div>
 
           <div className="wv-days">
             {HOURS.map(h => (
-              <div key={h}     className="wv-line"            style={{ top: (h - HOUR_START) * PX_PER_HOUR }} />
+              <div key={h}     className="wv-line"            style={{ top: h * PX_PER_HOUR }} />
             ))}
             {HOURS.map(h => (
-              <div key={h+'h'} className="wv-line wv-line--half" style={{ top: (h - HOUR_START) * PX_PER_HOUR + PX_PER_HOUR / 2 }} />
+              <div key={h+'h'} className="wv-line wv-line--half" style={{ top: h * PX_PER_HOUR + PX_PER_HOUR / 2 }} />
             ))}
 
             {days.map((d, i) => {
@@ -218,6 +285,7 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
                   className={`wv-col ${isToday ? 'wv-col--today' : ''}`}
                   role="button"
                   tabIndex={0}
+                  aria-label={`Add event on ${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
                   onDragOver={onEventDrop ? handleDragOver : undefined}
                   onDrop={onEventDrop ? ev => handleDrop(ds, ev) : undefined}
                   onClick={ev => {
@@ -225,37 +293,39 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
                     if (Date.now() - lastDropRef.current < 300) return
                     const rect = ev.currentTarget.getBoundingClientRect()
                     const y    = ev.clientY - rect.top
-                    const mins = Math.round((y / PX_PER_HOUR) * 60 + HOUR_START * 60)
-                    const h    = String(Math.floor(mins / 60)).padStart(2,'0')
-                    const m    = String(Math.round((mins % 60) / 15) * 15 % 60).padStart(2,'0')
-                    onSlotClick(ds, `${h}:${m}`, false)
+                    // Round the whole time, not just the minutes: 9:55 is 10:00.
+                    const mins = Math.round(((y / PX_PER_HOUR) * 60) / 15) * 15
+                    onSlotClick(ds, minsToTime(Math.max(0, Math.min(DAY_MINS - 15, mins))), false)
                   }}
                   onKeyDown={ev => {
+                    if (ev.target !== ev.currentTarget) return
                     if (ev.key === 'Enter' || ev.key === ' ') {
                       ev.preventDefault()
                       onSlotClick?.(ds, '09:00', false)
                     }
                   }}
                 >
-                  {isToday && nowY >= 0 && nowY <= GRID_HEIGHT && (
+                  {isToday && (
                     <div className="wv-now" style={{ top: nowY }}>
                       <div className="wv-now-dot" />
                     </div>
                   )}
 
-                  {laid.map(e => {
-                    const y = toY(e.time)
-                    const h = toH(e.time, e.endTime)
-                    if (y + h < 0 || y > GRID_HEIGHT) return null
+                  {laid.map(seg => {
+                    const { e } = seg
+                    const y = minsToY(seg.s)
+                    const h = Math.max(minsToY(seg.en - seg.s), MIN_EVT_PX)
+                    const fg = textOn(e.color)
+                    const canDrag = !!onEventDrop && seg.first && e.writable !== false
                     return (
                       <div
                         key={e.id}
                         className="wv-evt"
                         role="button"
                         tabIndex={0}
-                        aria-label={`${e.title}, ${e.date}`}
-                        draggable={!!onEventDrop}
-                        onDragStart={onEventDrop ? ev => handleDragStart(e, ev) : undefined}
+                        aria-label={`${e.title}, ${e.date} ${fmtTime(e.time)}`}
+                        draggable={canDrag}
+                        onDragStart={canDrag ? ev => handleDragStart(e, ev) : undefined}
                         onClick={ev => { ev.stopPropagation(); onEventClick?.(e) }}
                         onKeyDown={ev => {
                           if (ev.key === 'Enter' || ev.key === ' ') {
@@ -267,20 +337,21 @@ export default function WeekView({ events = [], focusDate, onSlotClick, onEventC
                         style={{
                           top:    y,
                           height: h,
-                          left:   `calc(${(e._col / e._n) * 100}% + 2px)`,
-                          width:  `calc(${100 / e._n}% - 4px)`,
+                          left:   `calc(${(seg.col / seg.n) * 100}% + 2px)`,
+                          width:  `calc(${100 / seg.n}% - 4px)`,
                           background:  e.color + 'CC',
                           borderLeft:  `3px solid ${e.color}`,
+                          color: fg,
                         }}
                       >
-                        <div className="wv-evt-title" style={{ color: '#fff' }}>{e.title}</div>
+                        <div className="wv-evt-title" style={{ color: fg }}>{e.title}</div>
                         {h > 36 && (
-                          <div className="wv-evt-time" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                          <div className="wv-evt-time" style={{ color: fg, opacity: 0.85 }}>
                             {fmtTime(e.time)}{e.endTime ? ` – ${fmtTime(e.endTime)}` : ''}
                           </div>
                         )}
                         {e.label && h > 52 && (
-                          <div className="wv-evt-label" style={{ color: 'rgba(255,255,255,0.75)' }}>{e.label}</div>
+                          <div className="wv-evt-label" style={{ color: fg, opacity: 0.75 }}>{e.label}</div>
                         )}
                       </div>
                     )
