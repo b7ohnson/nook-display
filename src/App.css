@@ -90,7 +90,7 @@
 .feud-screen, .jeop-board-screen, .jeop-clue-screen { color: var(--text); background: var(--bg); }
 
 /* ── Focus ──────────────────────────────────── */
-:focus { outline: none; }
+:focus:not(:focus-visible) { outline: none; }
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
@@ -953,7 +953,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   font-family: var(--font);
   color: var(--text);
   width: 200px;
-  outline: none;
   transition: border-color 0.15s;
 }
 
@@ -1444,7 +1443,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   font-size: 0.8rem;
   font-family: var(--font);
   color: var(--text);
-  outline: none;
   transition: border-color 0.15s;
   min-width: 0;
 }
@@ -1893,7 +1891,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   z-index: 201;
   display: flex;
   flex-direction: column;
-  outline: none;
 }
 
 .settings-panel__header {
@@ -2132,7 +2129,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   font-family: var(--font);
   color: var(--text);
   background: white;
-  outline: none;
   width: 100%;
   transition: border-color 0.15s;
 }
@@ -2386,7 +2382,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   font-family: Georgia, serif;
   font-size: 0.78rem;
   color: var(--menu-title, #2c1a06);
-  outline: none;
 }
 
 /* Dark mode overrides */
@@ -2879,13 +2874,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .leaderboard-tab {
   background: none;
   border: 1.5px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.72rem;
+  border-radius: var(--radius);
+  min-height: var(--tap);
+  padding: 0 14px;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-2);
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
 .leaderboard-tab--active {
   background: var(--accent);
@@ -2896,8 +2892,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .leaderboard-empty {
   padding: 20px;
   text-align: center;
-  color: var(--text-3);
-  font-size: 0.85rem;
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+.leaderboard-empty--error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--danger);
 }
 
 .leaderboard-list {
@@ -2914,12 +2917,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 .leaderboard-row:last-child { border-bottom: none; }
 
-.leaderboard-rank  { width: 24px; font-size: 0.9rem; text-align: center; }
-.leaderboard-name  { flex: 1; font-size: 0.88rem; font-weight: 600; color: var(--text); }
-.leaderboard-score { font-size: 0.88rem; font-weight: 700; color: var(--accent-text); }
+.leaderboard-rank  { width: 28px; font-size: 1rem; text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.leaderboard-name  { flex: 1; font-size: 1rem; font-weight: 600; color: var(--text); }
+.leaderboard-score { font-size: 1rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.leaderboard-row--first .leaderboard-rank,
+.leaderboard-row--first .leaderboard-score { color: var(--warn); }
+.leaderboard-row--first .leaderboard-name { font-weight: 800; }
 
 /* ── Dark mode game overrides ── */
-[data-theme="dark"] .game-card   { background: var(--surface); }
+[data-theme="dark"] :not(.games-grid) > .game-card { background: var(--surface); }
 [data-theme="dark"] .riddle-card { background: var(--surface); }
 [data-theme="dark"] .leaderboard { background: var(--surface); }
 
@@ -3003,7 +3009,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   color: white;
   font-size: 0.9rem;
   text-align: center;
-  outline: none;
   width: 180px;
 }
 .tetris-name-input::placeholder { color: rgba(255,255,255,0.4); }
@@ -3303,7 +3308,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   padding: 8px 14px;
   font-size: 0.9rem;
   color: var(--text);
-  outline: none;
 }
 
 .trivia-save-btn {
@@ -3665,7 +3669,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   padding: 16px 20px;
   font-size: 1rem;
   font-weight: 700;
-  color: #92400e;
+  color: var(--warn);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3785,7 +3789,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   border-radius: 10px;
 }
 
-.showdown-final-rank { font-size: 1.2rem; width: 30px; text-align: center; }
+.showdown-final-rank { font-size: 1.2rem; width: 30px; text-align: center; color: var(--text-3); }
+.showdown-final-rank--first { color: var(--warn); font-weight: 800; }
 .showdown-final-name { flex: 1; font-weight: 700; color: var(--text); }
 .showdown-final-pts  { font-weight: 800; color: var(--accent-text); }
 
@@ -4011,7 +4016,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   border-radius: 10px;
 }
 
-.headsup-results-rank  { font-size: 1.2rem; width: 30px; text-align: center; }
+.headsup-results-rank  { font-size: 1.2rem; width: 30px; text-align: center; color: var(--text-3); }
+.headsup-results-rank--first { color: var(--warn); font-weight: 800; }
 .headsup-results-name  { flex: 1; font-weight: 700; color: var(--text); }
 .headsup-results-score { font-weight: 600; color: var(--text-2); }
 
@@ -4057,7 +4063,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: white;
+  color: var(--on-team);
   transition: opacity 0.3s, transform 0.2s;
 }
 
@@ -4191,8 +4197,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 20px;
-  background: var(--accent-dim, #3b82f622);
-  color: var(--accent, #3b82f6);
+  background: var(--accent-tint);
+  color: var(--accent-text);
   vertical-align: middle;
   letter-spacing: 0.02em;
 }
@@ -4810,7 +4816,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   color: #fff;
   font-size: 16px;
   padding: 10px 14px;
-  outline: none;
 }
 .feud-fm-manual-input:focus { border-color: var(--amber); }
 .feud-fm-waiting { font-size: 14px; color: rgba(255,255,255,0.45); font-style: italic; }
@@ -5217,7 +5222,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   padding: 7px 14px;
   font-size: 0.82rem;
   color: var(--text);
-  outline: none;
   font-family: var(--font);
 }
 .sp-search-input:focus { border-color: #1DB954; }

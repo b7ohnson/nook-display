@@ -7,13 +7,15 @@ import { useLeaderboard } from '../../hooks/useLeaderboard'
 const COLS = 10, ROWS = 20, BLOCK = 28, NEXT_BLOCK = 22
 
 const PIECES = [
-  { shape: [[1,1,1,1]],          color: '#00d4d4' }, // I
-  { shape: [[1,1],[1,1]],        color: '#d4d400' }, // O
-  { shape: [[0,1,0],[1,1,1]],    color: '#9000d4' }, // T
-  { shape: [[0,1,1],[1,1,0]],    color: '#00c400' }, // S
-  { shape: [[1,1,0],[0,1,1]],    color: '#d40000' }, // Z
-  { shape: [[1,0,0],[1,1,1]],    color: '#0060d4' }, // J
-  { shape: [[0,0,1],[1,1,1]],    color: '#d47000' }, // L
+  // Seven pieces in the house palette: still easy to tell apart on the
+  // navy board, without the neon (and without purple).
+  { shape: [[1,1,1,1]],          color: '#7FB3D9' }, // I  sky
+  { shape: [[1,1],[1,1]],        color: '#F0A500' }, // O  amber
+  { shape: [[0,1,0],[1,1,1]],    color: '#E0E6EE' }, // T  fog
+  { shape: [[0,1,1],[1,1,0]],    color: '#5FAE7E' }, // S  pine
+  { shape: [[1,1,0],[0,1,1]],    color: '#D2553F' }, // Z  brick
+  { shape: [[1,0,0],[1,1,1]],    color: '#3F7097' }, // J  slate
+  { shape: [[0,0,1],[1,1,1]],    color: '#D98B4A' }, // L  clay
 ]
 
 const SCORE_TABLE = [0, 100, 300, 500, 800]
@@ -103,7 +105,7 @@ export default function Tetris({ onExit }) {
     const ctx = canvas.getContext('2d')
     const W = COLS * BLOCK, H = ROWS * BLOCK
 
-    ctx.fillStyle = '#111318'
+    ctx.fillStyle = '#0D1822'
     ctx.fillRect(0, 0, W, H)
 
     ctx.strokeStyle = 'rgba(255,255,255,0.04)'
@@ -142,7 +144,7 @@ export default function Tetris({ onExit }) {
 
     if (nextCanvas && gs.next) {
       const nctx = nextCanvas.getContext('2d')
-      nctx.fillStyle = '#111318'
+      nctx.fillStyle = '#0D1822'
       nctx.fillRect(0, 0, nextCanvas.width, nextCanvas.height)
       const s = gs.next.shape
       const ox = Math.floor((nextCanvas.width  - s[0].length * NEXT_BLOCK) / 2)
