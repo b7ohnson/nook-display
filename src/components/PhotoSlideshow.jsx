@@ -4,9 +4,50 @@ import { useGallery } from '../hooks/useGallery'
 const PHOTO_MS     = 8000   // how long each photo stays
 const CROSSFADE_MS = 2000   // fade overlap
 const KB_VARIANTS  = ['kb-a', 'kb-b', 'kb-c', 'kb-d']
+const RETRY_MS     = 5 * 60 * 1000
+const IMAGE_CACHE  = 'nook-remote-images' // must match the route in sw.js
+
+// Photos are painted as CSS backgrounds, which fail silently: a photo that
+// can't be fetched just leaves the screen black. So each one is test-loaded
+// first and only the ones that actually decode are shown. The service worker
+// caches cross-origin images cache-first and can't see their status, so an
+// error response (Storage answers 402 when billing lapses) would otherwise be
+// replayed for two weeks — a failed photo is evicted so the retry reaches the
+// network.
+function useLoadablePhotos(photos) {
+  const [status, setStatus] = useState({}) // url -> 'ok' | 'failed'
+
+  useEffect(() => {
+    let cancelled = false
+    const probe = (url) => {
+      const img = new Image()
+      img.onload = () => { if (!cancelled) setStatus(s => ({ ...s, [url]: 'ok' })) }
+      img.onerror = () => {
+        if ('caches' in window) {
+          caches.open(IMAGE_CACHE).then(c => c.delete(url)).catch(() => {})
+        }
+        if (!cancelled) setStatus(s => ({ ...s, [url]: 'failed' }))
+      }
+      img.src = url
+    }
+    photos.forEach(p => probe(p.url))
+    const t = setInterval(() => {
+      setStatus(s => {
+        photos.forEach(p => { if (s[p.url] === 'failed') probe(p.url) })
+        return s
+      })
+    }, RETRY_MS)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [photos])
+
+  const usable  = photos.filter(p => status[p.url] === 'ok')
+  const settled = photos.every(p => status[p.url])
+  return { usable, allFailed: photos.length > 0 && settled && usable.length === 0 }
+}
 
 export default function PhotoSlideshow() {
-  const { photos, loading } = useGallery()
+  const { photos: allPhotos, loading } = useGallery()
+  const { usable: photos, allFailed } = useLoadablePhotos(allPhotos)
   const [cur, setCur]       = useState(0)
   const [prev, setPrev]     = useState(null)
   const [fading, setFading] = useState(false)
@@ -45,8 +86,11 @@ export default function PhotoSlideshow() {
         <div className="slideshow-content">
           <div className="slideshow-time">{time}</div>
           <div className="slideshow-date">{date}</div>
-          {!loading && (
+          {!loading && allPhotos.length === 0 && (
             <div className="slideshow-caption">Add photos in the NooK companion app</div>
+          )}
+          {allFailed && (
+            <div className="slideshow-caption">Photos can't be loaded right now</div>
           )}
         </div>
         <div className="slideshow-hint">Touch anywhere to continue</div>
@@ -54,8 +98,9 @@ export default function PhotoSlideshow() {
     )
   }
 
-  const photo     = photos[cur]
-  const prevPhoto = prev !== null ? photos[prev] : null
+  // The usable list can shrink between renders, so indexes are wrapped.
+  const photo     = photos[cur % photos.length]
+  const prevPhoto = prev !== null ? photos[prev % photos.length] : null
   const kbClass   = KB_VARIANTS[cur % KB_VARIANTS.length]
 
   return (
